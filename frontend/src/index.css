@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+  
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6;
+  }
+
+  .excel-spreadsheet {
+    @apply w-full;
+  }
+
+  .formula-bar {
+    @apply shadow-sm;
+  }
+
+  .formula-input {
+    @apply font-mono;
+  }
+
+  /* Minitab Styles */
+  .minitab-layout {
+    @apply bg-gray-50;
+  }
+
+  .minitab-header {
+    @apply bg-gray-100 font-semibold text-gray-700;
+  }
+
+  .minitab-grid {
+    @apply border border-gray-300;
+  }
+
+  .minitab-grid .ag-header-cell {
+    @apply border-r border-gray-300;
+  }
+
+  .minitab-grid .ag-cell {
+    @apply border-r border-b border-gray-200;
+  }
+}
+
