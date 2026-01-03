@@ -26,3 +26,4 @@ class CellAdmin(admin.ModelAdmin):
     search_fields = ('spreadsheet__name', 'value')
     readonly_fields = ('id', 'created_at', 'updated_at')
 
+

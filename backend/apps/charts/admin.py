@@ -15,3 +15,4 @@ class ChartAdmin(admin.ModelAdmin):
     search_fields = ('title', 'spreadsheet__name', 'user__username')
     readonly_fields = ('id', 'created_at', 'updated_at')
 
+

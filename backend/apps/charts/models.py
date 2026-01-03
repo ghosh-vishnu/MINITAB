@@ -55,3 +55,4 @@ class Chart(models.Model):
     def __str__(self):
         return f"{self.chart_type} - {self.title}"
 
+

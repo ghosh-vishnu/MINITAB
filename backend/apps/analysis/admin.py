@@ -15,3 +15,4 @@ class AnalysisAdmin(admin.ModelAdmin):
     search_fields = ('spreadsheet__name', 'user__username')
     readonly_fields = ('id', 'created_at')
 
+

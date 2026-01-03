@@ -19,3 +19,4 @@ Write-Host "Application started!" -ForegroundColor Green
 Write-Host "Frontend: http://localhost:3000" -ForegroundColor Cyan
 Write-Host "Backend: http://localhost:8000" -ForegroundColor Cyan
 
+

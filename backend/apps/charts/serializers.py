@@ -29,3 +29,4 @@ class ChartDataSerializer(serializers.Serializer):
     labels = serializers.ListField(child=serializers.CharField())
     datasets = serializers.ListField(child=serializers.DictField())
 
+

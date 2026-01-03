@@ -79,3 +79,4 @@ class Cell(models.Model):
     def __str__(self):
         return f"Cell({self.row_index}, {self.column_index}) in {self.spreadsheet.name}"
 
+
