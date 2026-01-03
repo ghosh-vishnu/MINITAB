@@ -7,6 +7,9 @@ interface User {
   email: string
   first_name?: string
   last_name?: string
+  is_super_admin?: boolean
+  is_superuser?: boolean
+  roles?: Array<{ id: string; name: string }>
 }
 
 interface AuthState {

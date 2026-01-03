@@ -10,9 +10,11 @@ from django.contrib.auth import get_user_model
 
 from .serializers import (
     UserRegistrationSerializer,
-    UserSerializer,
+    UserSerializer as AuthUserSerializer,
     LoginSerializer
 )
+from apps.rbac.serializers import UserSerializer as RBACUserSerializer
+from apps.rbac.utils import log_activity, get_client_ip, get_user_agent
 
 User = get_user_model()
 
@@ -33,8 +35,11 @@ class RegisterView(generics.CreateAPIView):
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
         
+        # Use RBAC serializer to include roles and permissions
+        user_serializer = RBACUserSerializer(user, context={'request': request})
+        
         return Response({
-            'user': UserSerializer(user).data,
+            'user': user_serializer.data,
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }, status=status.HTTP_201_CREATED)
@@ -53,8 +58,22 @@ def login_view(request):
     # Generate JWT tokens
     refresh = RefreshToken.for_user(user)
     
+    # Log login activity
+    log_activity(
+        user=user,
+        action_type='login',
+        model_name='User',
+        description=f"User logged in: {user.username}",
+        object_id=user.id,
+        ip_address=get_client_ip(request),
+        user_agent=get_user_agent(request)
+    )
+    
+    # Use RBAC serializer to include roles and permissions
+    user_serializer = RBACUserSerializer(user, context={'request': request})
+    
     return Response({
-        'user': UserSerializer(user).data,
+        'user': user_serializer.data,
         'refresh': str(refresh),
         'access': str(refresh.access_token),
     }, status=status.HTTP_200_OK)
@@ -78,6 +97,18 @@ def logout_view(request):
             except Exception:
                 # Token invalid or already blacklisted
                 pass
+        
+        # Log logout activity
+        log_activity(
+            user=request.user,
+            action_type='logout',
+            model_name='User',
+            description=f"User logged out: {request.user.username}",
+            object_id=request.user.id,
+            ip_address=get_client_ip(request),
+            user_agent=get_user_agent(request)
+        )
+        
         return Response(
             {'message': 'Successfully logged out.'},
             status=status.HTTP_200_OK
@@ -95,6 +126,7 @@ def user_profile_view(request):
     """
     Get current user profile.
     """
-    serializer = UserSerializer(request.user)
+    # Use RBAC serializer to include roles and permissions
+    serializer = RBACUserSerializer(request.user, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 

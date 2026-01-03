@@ -17,6 +17,7 @@ from .serializers import (
     CellBulkUpdateSerializer
 )
 from .services import DataEngineService
+from apps.rbac.utils import log_activity, get_client_ip, get_user_agent
 
 
 class SpreadsheetViewSet(viewsets.ModelViewSet):
@@ -43,7 +44,16 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         """
         Set the user when creating a spreadsheet.
         """
-        serializer.save(user=self.request.user)
+        spreadsheet = serializer.save(user=self.request.user)
+        log_activity(
+            user=self.request.user,
+            action_type='create',
+            model_name='Spreadsheet',
+            description=f"Created spreadsheet: {spreadsheet.name}",
+            object_id=spreadsheet.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
     
     def create(self, request, *args, **kwargs):
         """
@@ -57,6 +67,37 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         full_serializer = SpreadsheetSerializer(serializer.instance)
         headers = self.get_success_headers(serializer.data)
         return Response(full_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def perform_update(self, serializer):
+        """
+        Log activity when updating a spreadsheet.
+        """
+        instance = serializer.instance
+        serializer.save()
+        log_activity(
+            user=self.request.user,
+            action_type='update',
+            model_name='Spreadsheet',
+            description=f"Updated spreadsheet: {instance.name}",
+            object_id=instance.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+    
+    def perform_destroy(self, instance):
+        """
+        Log activity when deleting a spreadsheet.
+        """
+        log_activity(
+            user=self.request.user,
+            action_type='delete',
+            model_name='Spreadsheet',
+            description=f"Deleted spreadsheet: {instance.name}",
+            object_id=instance.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        instance.delete()
     
     @action(detail=True, methods=['get'])
     def cells(self, request, pk=None):
@@ -82,6 +123,22 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             with transaction.atomic():
                 serializer.create(serializer.validated_data)
+            
+            # Log activity for bulk update
+            cells_count = len(serializer.validated_data.get('cells', []))
+            log_activity(
+                user=self.request.user,
+                action_type='update',
+                model_name='Cell',
+                description=f"Bulk updated {cells_count} cells in spreadsheet '{spreadsheet.name}'",
+                related_object=spreadsheet,
+                ip_address=get_client_ip(self.request),
+                user_agent=get_user_agent(self.request),
+                metadata={
+                    'cells_count': cells_count,
+                    'spreadsheet_id': str(spreadsheet.id)
+                }
+            )
             
             return Response(
                 {'message': 'Cells updated successfully'},
@@ -116,6 +173,25 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
             }
         )
         
+        # Log activity
+        action = 'create' if created else 'update'
+        log_activity(
+            user=self.request.user,
+            action_type=action,
+            model_name='Cell',
+            description=f"{'Created' if created else 'Updated'} cell at row {row_index}, column {column_index} in spreadsheet '{spreadsheet.name}'",
+            object_id=cell.id,
+            related_object=spreadsheet,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request),
+            metadata={
+                'row_index': row_index,
+                'column_index': column_index,
+                'value': request.data.get('value'),
+                'spreadsheet_id': str(spreadsheet.id)
+            }
+        )
+        
         serializer = CellSerializer(cell)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
@@ -134,11 +210,30 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        Cell.objects.filter(
+        cells = Cell.objects.filter(
             spreadsheet=spreadsheet,
             row_index=row_index,
             column_index=column_index
-        ).delete()
+        )
+        
+        if cells.exists():
+            cell = cells.first()
+            log_activity(
+                user=self.request.user,
+                action_type='delete',
+                model_name='Cell',
+                description=f"Deleted cell at row {row_index}, column {column_index} in spreadsheet '{spreadsheet.name}'",
+                object_id=cell.id,
+                related_object=spreadsheet,
+                ip_address=get_client_ip(self.request),
+                user_agent=get_user_agent(self.request),
+                metadata={
+                    'row_index': row_index,
+                    'column_index': column_index,
+                    'spreadsheet_id': str(spreadsheet.id)
+                }
+            )
+            cells.delete()
         
         return Response(
             {'message': 'Cell deleted successfully'},
@@ -185,6 +280,22 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 spreadsheet.row_count = len(df.index)
                 spreadsheet.column_count = len(df.columns)
                 spreadsheet.save()
+            
+            # Log activity
+            log_activity(
+                user=self.request.user,
+                action_type='import',
+                model_name='Spreadsheet',
+                description=f"Imported CSV file into spreadsheet '{spreadsheet.name}' ({len(df.index)} rows, {len(df.columns)} columns)",
+                object_id=spreadsheet.id,
+                ip_address=get_client_ip(self.request),
+                user_agent=get_user_agent(self.request),
+                metadata={
+                    'rows': len(df.index),
+                    'columns': len(df.columns),
+                    'file_type': 'CSV'
+                }
+            )
             
             return Response(
                 {'message': 'CSV imported successfully', 'rows': len(df.index), 'columns': len(df.columns)},
@@ -238,6 +349,23 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 spreadsheet.column_count = len(df.columns)
                 spreadsheet.save()
             
+            # Log activity
+            log_activity(
+                user=self.request.user,
+                action_type='import',
+                model_name='Spreadsheet',
+                description=f"Imported Excel file into spreadsheet '{spreadsheet.name}' ({len(df.index)} rows, {len(df.columns)} columns)",
+                object_id=spreadsheet.id,
+                ip_address=get_client_ip(self.request),
+                user_agent=get_user_agent(self.request),
+                metadata={
+                    'rows': len(df.index),
+                    'columns': len(df.columns),
+                    'file_type': 'Excel',
+                    'sheet_name': sheet_name
+                }
+            )
+            
             return Response(
                 {'message': 'Excel imported successfully', 'rows': len(df.index), 'columns': len(df.columns)},
                 status=status.HTTP_200_OK
@@ -272,6 +400,18 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         # Export to CSV
         csv_content = DataEngineService.export_to_csv(df)
         
+        # Log activity
+        log_activity(
+            user=self.request.user,
+            action_type='export',
+            model_name='Spreadsheet',
+            description=f"Exported spreadsheet '{spreadsheet.name}' to CSV",
+            object_id=spreadsheet.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request),
+            metadata={'file_type': 'CSV'}
+        )
+        
         from django.http import HttpResponse
         response = HttpResponse(csv_content, content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{spreadsheet.name}.csv"'
@@ -300,6 +440,18 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         
         # Export to Excel
         excel_content = DataEngineService.export_to_excel(df)
+        
+        # Log activity
+        log_activity(
+            user=self.request.user,
+            action_type='export',
+            model_name='Spreadsheet',
+            description=f"Exported spreadsheet '{spreadsheet.name}' to Excel",
+            object_id=spreadsheet.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request),
+            metadata={'file_type': 'Excel'}
+        )
         
         from django.http import HttpResponse
         response = HttpResponse(

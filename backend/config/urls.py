@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/spreadsheets/', include('apps.spreadsheets.urls')),
     path('api/analysis/', include('apps.analysis.urls')),
     path('api/charts/', include('apps.charts.urls')),
+    path('api/rbac/', include('apps.rbac.urls')),
 ]
 
 if settings.DEBUG:

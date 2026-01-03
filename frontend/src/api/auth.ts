@@ -22,6 +22,10 @@ export interface AuthResponse {
     email: string
     first_name?: string
     last_name?: string
+    is_super_admin?: boolean
+    is_superuser?: boolean
+    roles?: Array<{ id: string; name: string; description?: string }>
+    permissions?: Array<{ id: string; name: string; codename: string }>
   }
   access: string
   refresh: string

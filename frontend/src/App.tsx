@@ -6,6 +6,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import SpreadsheetView from './pages/SpreadsheetView'
 import MinitabView from './pages/MinitabView'
+import Profile from './pages/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import MinitabLayout from './components/MinitabLayout'
@@ -36,6 +37,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="spreadsheet/:id" element={<SpreadsheetView />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
         <Route
           path="/minitab"
@@ -46,6 +48,7 @@ function App() {
           }
         >
           <Route path="spreadsheet/:id" element={<MinitabView />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
       </Routes>

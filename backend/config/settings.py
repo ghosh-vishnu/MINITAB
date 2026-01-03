@@ -36,12 +36,14 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_extensions',
+    'django_filters',
     
     # Local apps
     'apps.authentication',
     'apps.spreadsheets',
     'apps.analysis',
     'apps.charts',
+    'apps.rbac',
 ]
 
 MIDDLEWARE = [

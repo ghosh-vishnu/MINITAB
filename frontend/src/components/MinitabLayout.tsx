@@ -3,22 +3,48 @@
  * Mimics Minitab Statistical Software interface
  */
 
-import { Outlet, Link, useNavigate } from 'react-router-dom'
+import { Outlet, Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { authAPI } from '../api/auth'
 import toast from 'react-hot-toast'
 import { useState, useEffect, useRef } from 'react'
+import GraphBuilder from './GraphBuilder'
+import { spreadsheetsAPI, Cell } from '../api/spreadsheets'
 
 const MinitabLayout = () => {
   const { user, logout: logoutStore, refreshToken } = useAuthStore()
   const navigate = useNavigate()
+  const { id: spreadsheetId } = useParams<{ id?: string }>()
+  const [cells, setCells] = useState<Cell[]>([])
   const [showNavigator, setShowNavigator] = useState(true)
   const [showNavigatorDropdown, setShowNavigatorDropdown] = useState(false)
   const [groupByWorksheet, setGroupByWorksheet] = useState(true)
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'name'>('oldest')
   const [showDataMenu, setShowDataMenu] = useState(false)
+  const [showGraphMenu, setShowGraphMenu] = useState(false)
+  const [showGraphBuilder, setShowGraphBuilder] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const dataMenuRef = useRef<HTMLDivElement>(null)
+  const graphMenuRef = useRef<HTMLDivElement>(null)
+
+  // Load cells data when spreadsheet ID is available
+  useEffect(() => {
+    const loadCells = async () => {
+      if (spreadsheetId && spreadsheetId !== 'undefined') {
+        try {
+          const cellsData = await spreadsheetsAPI.getCells(spreadsheetId)
+          setCells(cellsData || [])
+        } catch (error: any) {
+          // If cells endpoint fails (404), just use empty array
+          console.warn('No cells found or cells endpoint not available:', error)
+          setCells([])
+        }
+      } else {
+        setCells([])
+      }
+    }
+    loadCells()
+  }, [spreadsheetId])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -29,16 +55,19 @@ const MinitabLayout = () => {
       if (dataMenuRef.current && !dataMenuRef.current.contains(event.target as Node)) {
         setShowDataMenu(false)
       }
+      if (graphMenuRef.current && !graphMenuRef.current.contains(event.target as Node)) {
+        setShowGraphMenu(false)
+      }
     }
 
-    if (showNavigatorDropdown || showDataMenu) {
+    if (showNavigatorDropdown || showDataMenu || showGraphMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showNavigatorDropdown, showDataMenu])
+  }, [showNavigatorDropdown, showDataMenu, showGraphMenu])
 
   const handleLogout = async () => {
     try {
@@ -98,15 +127,22 @@ const MinitabLayout = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded" title="Settings">
+            <Link
+              to="/minitab/profile"
+              className="p-2 hover:bg-gray-100 rounded"
+              title="Settings"
+            >
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-            </button>
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+            </Link>
+            <Link
+              to="/minitab/profile"
+              className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium hover:bg-blue-700 cursor-pointer"
+            >
               {getUserInitials()}
-            </div>
+            </Link>
           </div>
         </div>
 
@@ -421,7 +457,283 @@ const MinitabLayout = () => {
 
             <button className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">Calc</button>
             <button className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">Stat</button>
-            <button className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">Graph</button>
+
+            {/* Graph Menu */}
+            <div className="relative" ref={graphMenuRef}>
+              <button
+                onClick={() => {
+                  setShowGraphMenu(!showGraphMenu)
+                  setShowNavigatorDropdown(false)
+                  setShowDataMenu(false)
+                }}
+                className={`px-3 py-1.5 text-sm rounded ${
+                  showGraphMenu
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Graph
+              </button>
+
+              {/* Graph Dropdown Menu */}
+              {showGraphMenu && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-30 min-w-[220px] py-1 max-h-[600px] overflow-y-auto">
+                  <button
+                    onClick={() => {
+                      setShowGraphBuilder(true)
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Graph Builder...
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      toast.info('Scatterplot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Scatterplot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Binned Scatterplot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Binned Scatterplot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Matrix Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Matrix Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Correlogram... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Correlogram...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Bubble Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Bubble Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Marginal Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Marginal Plot...
+                  </button>
+                  
+                  <div className="border-t border-gray-200 my-1"></div>
+                  
+                  <button
+                    onClick={() => {
+                      toast.info('Histogram... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Histogram...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Dotplot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Dotplot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Stem-and-Leaf... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Stem-and-Leaf...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Probability Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Probability Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Empirical CDF... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Empirical CDF...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Probability Distribution Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Probability Distribution Plot...
+                  </button>
+                  
+                  <div className="border-t border-gray-200 my-1"></div>
+                  
+                  <button
+                    onClick={() => {
+                      toast.info('Boxplot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Boxplot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Interval Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Interval Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Individual Value Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Individual Value Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Line Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Line Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Parallel Coordinates Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Parallel Coordinates Plot...
+                  </button>
+                  
+                  <div className="border-t border-gray-200 my-1"></div>
+                  
+                  <div className="relative group">
+                    <button
+                      onClick={() => {
+                        toast.info('Bar Chart submenu coming soon')
+                        setShowGraphMenu(false)
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-between"
+                    >
+                      <span>Bar Chart</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      toast.info('Heatmap... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Heatmap...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Pie Chart... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Pie Chart...
+                  </button>
+                  
+                  <div className="border-t border-gray-200 my-1"></div>
+                  
+                  <button
+                    onClick={() => {
+                      toast.info('Time Series Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Time Series Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Area Graph... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Area Graph...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('Contour Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Contour Plot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('3D Scatterplot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    3D Scatterplot...
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.info('3D Surface Plot... coming soon')
+                      setShowGraphMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    3D Surface Plot...
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">View</button>
             <button className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">Predictive Analytics Module</button>
             <button className="px-2 py-1.5 text-gray-400">
@@ -545,7 +857,7 @@ const MinitabLayout = () => {
 
         {/* Main Content Area */}
         <main
-          className="flex-1 flex flex-col overflow-hidden bg-white transition-all duration-300"
+          className="flex-1 flex flex-col overflow-auto bg-white transition-all duration-300"
           style={{
             marginLeft: showNavigator ? '256px' : '0',
           }}
@@ -559,6 +871,14 @@ const MinitabLayout = () => {
         <span>Ready</span>
         <span>NaN Days Remaining</span>
       </footer>
+
+      {/* Graph Builder Modal */}
+      <GraphBuilder
+        isOpen={showGraphBuilder}
+        onClose={() => setShowGraphBuilder(false)}
+        cells={cells}
+        spreadsheetId={spreadsheetId}
+      />
     </div>
   )
 }
