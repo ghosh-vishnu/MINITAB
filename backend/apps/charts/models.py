@@ -18,6 +18,7 @@ class Chart(models.Model):
         ('line', 'Line Chart'),
         ('histogram', 'Histogram'),
         ('scatter', 'Scatter Plot'),
+        ('pie', 'Pie Chart'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

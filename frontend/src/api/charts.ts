@@ -6,7 +6,7 @@ export interface Chart {
   spreadsheet_name: string
   user: string
   user_username: string
-  chart_type: 'bar' | 'line' | 'histogram' | 'scatter'
+  chart_type: 'bar' | 'line' | 'histogram' | 'scatter' | 'pie'
   title: string
   x_axis_column: number
   y_axis_columns: number[]
@@ -27,7 +27,7 @@ export interface ChartData {
 
 export interface CreateChartData {
   spreadsheet: string
-  chart_type: 'bar' | 'line' | 'histogram' | 'scatter'
+  chart_type: 'bar' | 'line' | 'histogram' | 'scatter' | 'pie'
   title: string
   x_axis_column: number
   y_axis_columns: number[]

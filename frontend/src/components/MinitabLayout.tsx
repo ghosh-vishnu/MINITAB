@@ -44,7 +44,31 @@ const MinitabLayout = () => {
       }
     }
     loadCells()
-  }, [spreadsheetId])
+    
+    // Refresh cells periodically when GraphBuilder is open or every 2 seconds
+    const intervalId = setInterval(() => {
+      if (spreadsheetId && spreadsheetId !== 'undefined' && showGraphBuilder) {
+        loadCells()
+      }
+    }, 2000) // Refresh every 2 seconds when GraphBuilder is open
+    
+    return () => clearInterval(intervalId)
+  }, [spreadsheetId, showGraphBuilder])
+  
+  // Also refresh cells when GraphBuilder opens
+  useEffect(() => {
+    if (showGraphBuilder && spreadsheetId && spreadsheetId !== 'undefined') {
+      const refreshCells = async () => {
+        try {
+          const cellsData = await spreadsheetsAPI.getCells(spreadsheetId)
+          setCells(cellsData || [])
+        } catch (error: any) {
+          console.warn('Failed to refresh cells:', error)
+        }
+      }
+      refreshCells()
+    }
+  }, [showGraphBuilder, spreadsheetId])
 
   // Close dropdown when clicking outside
   useEffect(() => {
