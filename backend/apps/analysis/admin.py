@@ -16,3 +16,4 @@ class AnalysisAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'created_at')
 
 
+

@@ -30,3 +30,4 @@ class ChartDataSerializer(serializers.Serializer):
     datasets = serializers.ListField(child=serializers.DictField())
 
 
+

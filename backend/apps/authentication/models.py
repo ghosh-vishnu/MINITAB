@@ -22,3 +22,4 @@ class User(AbstractUser):
         return self.username
 
 
+

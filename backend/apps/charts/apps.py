@@ -6,3 +6,4 @@ class ChartsConfig(AppConfig):
     name = 'apps.charts'
 
 
+

@@ -106,3 +106,4 @@ class ChartViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+

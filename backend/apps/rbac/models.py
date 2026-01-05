@@ -180,3 +180,4 @@ class ActivityLog(models.Model):
     def __str__(self):
         return f"{self.user.username if self.user else 'System'} - {self.action_type} - {self.model_name} - {self.created_at}"
 
+

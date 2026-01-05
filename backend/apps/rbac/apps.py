@@ -6,3 +6,4 @@ class RbacConfig(AppConfig):
     name = 'apps.rbac'
     verbose_name = 'RBAC & Activity Logging'
 
+

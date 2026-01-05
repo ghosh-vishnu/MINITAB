@@ -56,3 +56,4 @@ class Chart(models.Model):
         return f"{self.chart_type} - {self.title}"
 
 
+

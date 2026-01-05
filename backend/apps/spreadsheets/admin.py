@@ -27,3 +27,4 @@ class CellAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'created_at', 'updated_at')
 
 
+

@@ -136,3 +136,4 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS('\nRBAC system initialized successfully!'))
 
+

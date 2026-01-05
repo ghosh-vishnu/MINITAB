@@ -54,3 +54,4 @@ class Analysis(models.Model):
         return f"{self.analysis_type} on {self.spreadsheet.name}"
 
 
+
