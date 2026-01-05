@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, ArcElement } from 'chart.js'
 import { Bar, Line, Scatter, Pie } from 'react-chartjs-2'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { chartsAPI, Chart, ChartData, CreateChartData } from '../api/charts'
 import { Cell } from '../api/spreadsheets'
 import toast from 'react-hot-toast'
+// Dynamic imports for PDF generation
+// import jsPDF from 'jspdf'
+// import html2canvas from 'html2canvas'
 
 // Register Chart.js components
 ChartJS.register(
@@ -30,6 +33,7 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editingChart, setEditingChart] = useState<Chart | null>(null)
+  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // Extract available columns from cells with data
   const availableColumns = useMemo(() => {
@@ -221,6 +225,349 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
     }
   }
 
+  const handleExportToPDF = async (chart: Chart) => {
+    try {
+      toast.loading('Generating PDF...', { id: 'export-pdf' })
+      
+      // Dynamic import to avoid build issues
+      const [jsPDFModule, html2canvasModule] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas')
+      ])
+      
+      const jsPDF = (jsPDFModule as any).default || jsPDFModule
+      const html2canvas = html2canvasModule.default || html2canvasModule
+      
+      const chartElement = chartRefs.current[chart.id]
+      if (!chartElement) {
+        toast.error('Chart element not found', { id: 'export-pdf' })
+        return
+      }
+
+      // Get chart data for PDF
+      const chartData = generateChartDataFromCells(chart)
+      if (!chartData || chartData.labels.length === 0) {
+        toast.error('No data available for export', { id: 'export-pdf' })
+        return
+      }
+
+      // Find the canvas element directly from the chart
+      const chartCanvas = chartElement.querySelector('canvas') as HTMLCanvasElement
+      if (!chartCanvas) {
+        // Fallback: use html2canvas to capture the entire chart element
+        console.log('Canvas not found, using html2canvas fallback')
+        const canvas = await html2canvas(chartElement, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          logging: false,
+          useCORS: true,
+        })
+        
+        if (!canvas || canvas.width === 0 || canvas.height === 0) {
+          toast.error('Failed to capture chart image', { id: 'export-pdf' })
+          return
+        }
+        
+        // Continue with PDF creation using this canvas
+        const imgData = canvas.toDataURL('image/png', 1.0)
+        if (!imgData || imgData === 'data:,') {
+          toast.error('Failed to generate chart image', { id: 'export-pdf' })
+          return
+        }
+        
+        // Create PDF and add image (will be done below)
+        const pdf = new jsPDF('portrait', 'mm', 'a4')
+        const pdfWidth = pdf.internal.pageSize.getWidth()
+        const pdfHeight = pdf.internal.pageSize.getHeight()
+        const margin = 15
+        
+        // Add header, table, etc. (same as below)
+        pdf.setFillColor(240, 240, 240)
+        pdf.rect(0, 0, pdfWidth, 25, 'F')
+        pdf.setFontSize(14)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Minitab® Statistical Software', margin, 12)
+        pdf.setFontSize(9)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text('Chart Analysis Report', margin, 18)
+
+        const tableY = 35
+        pdf.setFontSize(8)
+        pdf.setFont('helvetica', 'bold')
+        const tableWidth = pdfWidth - (margin * 2)
+        const rowHeight = 6
+        const col1Width = 50
+        const col2Width = tableWidth - col1Width
+        
+        pdf.setFillColor(220, 220, 220)
+        pdf.rect(margin, tableY, tableWidth, rowHeight, 'F')
+        pdf.setDrawColor(150, 150, 150)
+        pdf.rect(margin, tableY, tableWidth, rowHeight, 'S')
+        pdf.text('Field', margin + 2, tableY + 4)
+        pdf.text('Value', margin + col1Width + 2, tableY + 4)
+        
+        const details = [
+          ['Title', chart.title],
+          ['Chart Type', chart.chart_type.charAt(0).toUpperCase() + chart.chart_type.slice(1) + ' Chart'],
+          ['Created Date', new Date(chart.created_at).toLocaleDateString('en-GB')],
+          ['Updated Date', new Date(chart.updated_at).toLocaleDateString('en-GB')],
+          ['Generated Date', new Date().toLocaleDateString('en-GB')],
+        ]
+        
+        let currentY = tableY + rowHeight
+        details.forEach(([label, value]) => {
+          pdf.setFillColor(255, 255, 255)
+          pdf.rect(margin, currentY, tableWidth, rowHeight, 'F')
+          pdf.setDrawColor(200, 200, 200)
+          pdf.rect(margin, currentY, tableWidth, rowHeight, 'S')
+          pdf.line(margin + col1Width, currentY, margin + col1Width, currentY + rowHeight)
+          pdf.setFont('helvetica', 'bold')
+          pdf.text(label, margin + 2, currentY + 4)
+          pdf.setFont('helvetica', 'normal')
+          const valueText = pdf.splitTextToSize(value, col2Width - 4)
+          pdf.text(valueText, margin + col1Width + 2, currentY + 4)
+          currentY += rowHeight
+        })
+
+        currentY += 10
+        pdf.setFontSize(12)
+        pdf.setFont('helvetica', 'bold')
+        const chartTypeName = chart.chart_type === 'pie' ? 'Pie Chart' : 
+                             chart.chart_type === 'line' ? 'Line Chart' :
+                             chart.chart_type === 'bar' ? 'Bar Chart' :
+                             chart.chart_type === 'scatter' ? 'Scatter Plot' : 'Chart'
+        pdf.text(`${chartTypeName} for ${chart.title}`, pdfWidth / 2, currentY, { align: 'center' })
+        pdf.setFontSize(9)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text('Review Period', pdfWidth / 2, currentY + 6, { align: 'center' })
+
+        const imgWidth = pdfWidth - (margin * 2)
+        const imgHeight = (canvas.height * imgWidth) / canvas.width
+        const chartY = currentY + 15
+        
+        if (chartY + imgHeight > pdfHeight - margin) {
+          pdf.addPage()
+          currentY = margin + 10
+        } else {
+          currentY = chartY
+        }
+
+        try {
+          pdf.addImage(imgData, 'PNG', margin, currentY, imgWidth, Math.min(imgHeight, pdfHeight - currentY - margin - 20))
+        } catch (error) {
+          console.error('Error adding image to PDF:', error)
+          toast.error('Failed to add chart to PDF', { id: 'export-pdf' })
+          return
+        }
+
+        const footerY = pdfHeight - margin
+        pdf.setFontSize(8)
+        pdf.setFont('helvetica', 'italic')
+        pdf.text(`Generated on ${new Date().toLocaleString()}`, pdfWidth / 2, footerY, { align: 'center' })
+
+        pdf.save(`${chart.title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`)
+        toast.success('PDF exported successfully', { id: 'export-pdf' })
+        return
+      }
+
+      // Direct canvas approach - get image from Chart.js canvas
+      let imgData = chartCanvas.toDataURL('image/png', 1.0)
+      let imgWidth = chartCanvas.width
+      let imgHeight = chartCanvas.height
+      
+      if (!imgData || imgData === 'data:,') {
+        toast.error('Failed to get chart image from canvas', { id: 'export-pdf' })
+        return
+      }
+
+      // Create PDF
+      const pdf = new jsPDF('portrait', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const margin = 15
+      const topMargin = 20
+
+      // Company Header Section (Top Left)
+      pdf.setFontSize(12)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('BEACON', margin, topMargin)
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text('Pharmaceuticals PLC', margin, topMargin + 5)
+      pdf.setFontSize(8)
+      pdf.setFont('helvetica', 'italic')
+      pdf.text('Light for life.', margin, topMargin + 9)
+
+      // Company Header Section (Top Right)
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      const rightText = 'BEACON PHARMACEUTICALS PLC'
+      pdf.text(rightText, pdfWidth - margin, topMargin, { align: 'right' })
+      pdf.setFontSize(8)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text('Bhaluka, Mymensingh, Bangladesh', pdfWidth - margin, topMargin + 5, { align: 'right' })
+
+      // Main Title
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Pie Chart Analysis Flow Chart of Mini Tab Software', pdfWidth / 2, topMargin + 20, { align: 'center' })
+
+      // Document Details Table
+      const tableY = topMargin + 30
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'normal')
+      
+      // Table structure - 3 columns, multiple rows
+      const col1Width = 45
+      const col2Width = 50
+      const col3Width = 50
+      const rowHeight = 5
+      const tableWidth = col1Width + col2Width + col3Width
+      const tableStartX = (pdfWidth - tableWidth) / 2
+      
+      // Draw table borders
+      pdf.setDrawColor(0, 0, 0)
+      pdf.setLineWidth(0.1)
+      
+      // Table rows
+      const tableData = [
+        ['Title', '', ''],
+        ['Reference Document No.', 'SOP/QA/GEN/018/09', ''],
+        ['Originated By', 'Phy', '17.09.25'],
+        ['Annexure-4', '', ''],
+        ['Page No.', '13 of 13', ''],
+        ['Approved By', '', '20.09.29'],
+        ['Issue Date', '21 SEP 2025', ''],
+        ['Effective Date', '21 SEP 2025', ''],
+        ['Review Date', '20 SEP 2028', ''],
+      ]
+      
+      let currentY = tableY
+      tableData.forEach((row) => {
+        // Draw horizontal lines
+        pdf.line(tableStartX, currentY, tableStartX + tableWidth, currentY)
+        
+        // Draw vertical lines
+        pdf.line(tableStartX, currentY, tableStartX, currentY + rowHeight)
+        pdf.line(tableStartX + col1Width, currentY, tableStartX + col1Width, currentY + rowHeight)
+        pdf.line(tableStartX + col1Width + col2Width, currentY, tableStartX + col1Width + col2Width, currentY + rowHeight)
+        pdf.line(tableStartX + tableWidth, currentY, tableStartX + tableWidth, currentY + rowHeight)
+        
+        // Add text
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(row[0] || '', tableStartX + 2, currentY + 3.5)
+        pdf.text(row[1] || '', tableStartX + col1Width + 2, currentY + 3.5)
+        pdf.text(row[2] || '', tableStartX + col1Width + col2Width + 2, currentY + 3.5)
+        
+        currentY += rowHeight
+      })
+      
+      // Close bottom border
+      pdf.line(tableStartX, currentY, tableStartX + tableWidth, currentY)
+
+      // Chart Title Section
+      currentY += 15
+      pdf.setFontSize(12)
+      pdf.setFont('helvetica', 'bold')
+      const chartTypeName = chart.chart_type === 'pie' ? 'Pie Chart' : 
+                           chart.chart_type === 'line' ? 'Line Chart' :
+                           chart.chart_type === 'bar' ? 'Bar Chart' :
+                           chart.chart_type === 'scatter' ? 'Scatter Plot' : 'Chart'
+      pdf.text(`${chartTypeName} for ${chart.title}`, pdfWidth / 2, currentY, { align: 'center' })
+      
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text('Review Period', pdfWidth / 2, currentY + 6, { align: 'center' })
+
+      // Add chart image
+      // For pie charts, leave space on right for legend
+      const legendSpace = (chart.chart_type === 'pie' && chartData.datasets[0]) ? 45 : 0
+      const pdfImgWidth = pdfWidth - (margin * 2) - legendSpace
+      const pdfImgHeight = (imgHeight * pdfImgWidth) / imgWidth
+      const chartY = currentY + 15
+      
+      // Check if chart fits on page
+      if (chartY + pdfImgHeight > pdfHeight - margin - 30) {
+        pdf.addPage()
+        currentY = margin + 10
+      } else {
+        currentY = chartY
+      }
+
+      // Calculate image dimensions to fit on page
+      const maxImgHeight = pdfHeight - currentY - margin - 30
+      const finalImgHeight = Math.min(pdfImgHeight, maxImgHeight)
+      
+      // Add image to PDF
+      try {
+        pdf.addImage(imgData, 'PNG', margin, currentY, pdfImgWidth, finalImgHeight)
+      } catch (error) {
+        console.error('Error adding image to PDF:', error)
+        toast.error('Failed to add chart to PDF', { id: 'export-pdf' })
+        return
+      }
+
+      // Add legend/data table if pie chart (on the right side of chart)
+      if (chart.chart_type === 'pie' && chartData.datasets[0]) {
+        // Position legend on the right side of the chart
+        const legendX = margin + pdfImgWidth + 5
+        const legendY = currentY + 10
+        
+        if (legendX + 40 < pdfWidth - margin) {
+          pdf.setFontSize(9)
+          pdf.setFont('helvetica', 'bold')
+          pdf.text('Category', legendX, legendY)
+          
+          pdf.setFont('helvetica', 'normal')
+          let legendCurrentY = legendY + 8
+          
+          const colors = [
+            [173, 216, 230],   // Light Blue (Good) - rgba(173, 216, 230)
+            [255, 99, 132],    // Red (Bad) - rgba(255, 99, 132)
+            [255, 206, 86],    // Yellow (Reject) - rgba(255, 206, 86)
+            [54, 162, 235],    // Blue
+            [153, 102, 255],   // Purple
+            [255, 159, 64],    // Orange
+          ]
+          
+          chartData.labels.forEach((label, index) => {
+            // Draw color box (square, larger)
+            const color = colors[index % colors.length]
+            pdf.setFillColor(color[0], color[1], color[2])
+            pdf.rect(legendX, legendCurrentY - 2, 4, 4, 'F')
+            pdf.setDrawColor(0, 0, 0)
+            pdf.setLineWidth(0.1)
+            pdf.rect(legendX, legendCurrentY - 2, 4, 4, 'S')
+            
+            pdf.setFontSize(7)
+            pdf.text(`${label}`, legendX + 6, legendCurrentY)
+            legendCurrentY += 5
+          })
+        }
+      }
+
+      // Watermarks
+      pdf.setFontSize(10)
+      pdf.setTextColor(128, 0, 128) // Purple
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('MASTER COPY', 10, pdfHeight / 2, { angle: 90, align: 'center' })
+      
+      pdf.setTextColor(255, 0, 0) // Red
+      pdf.text('Information Copy', pdfWidth - 10, pdfHeight / 2, { angle: 90, align: 'center' })
+      
+      // Reset text color
+      pdf.setTextColor(0, 0, 0)
+
+      // Save PDF
+      pdf.save(`${chart.title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`)
+      
+      toast.success('PDF exported successfully', { id: 'export-pdf' })
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error)
+      toast.error('Failed to export PDF', { id: 'export-pdf' })
+    }
+  }
+
   const renderChart = (chart: Chart) => {
     const chartData = generateChartDataFromCells(chart)
     if (!chartData || chartData.labels.length === 0) {
@@ -402,16 +749,16 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
           return `${binStart.toFixed(1)}`
         })
         
-        return (
-          <Bar
-            data={{
+      return (
+        <Bar
+          data={{
               labels: binLabels,
               datasets: [{
                 label: chartData.datasets[0]?.label || 'Frequency',
                 data: binCounts,
                 backgroundColor: 'rgba(54, 162, 235, 0.6)',
                 borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1,
+              borderWidth: 1,
               }],
             }}
             options={commonOptions}
@@ -433,17 +780,17 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
           'rgba(255, 159, 64, 0.8)',
         ]
         
-        return (
+      return (
           <Pie
             plugins={[ChartDataLabels]}
-            data={{
+          data={{
               labels: chartData.labels,
               datasets: [{
                 label: pieData.label,
                 data: pieData.data,
                 backgroundColor: colors.slice(0, chartData.labels.length),
                 borderColor: '#ffffff',
-                borderWidth: 2,
+              borderWidth: 2,
               }],
             }}
             options={{
@@ -498,12 +845,12 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <p className="text-gray-500 mb-4 text-lg">No charts yet</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
+          <button
+            onClick={() => setShowCreateModal(true)}
               className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-            >
-              Create Your First Chart
-            </button>
+          >
+            Create Your First Chart
+          </button>
           </div>
         </div>
       ) : (
@@ -512,7 +859,7 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
             {charts.map((chart) => (
               <div key={chart.id} className="bg-white border border-gray-300 rounded-lg shadow-sm p-6">
                 {/* Chart Header */}
-                <div className="flex justify-between items-start mb-4">
+              <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-800 mb-1">{chart.title}</h3>
                     <p className="text-xs text-gray-500">
@@ -521,28 +868,43 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => handleExportToPDF(chart)}
+                      className="text-green-600 hover:text-green-800 text-sm font-medium flex items-center gap-1"
+                      title="Export to PDF"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Export
+                    </button>
+                    <button
                       onClick={() => setEditingChart(chart)}
                       className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       title="Edit Chart"
                     >
                       Edit
                     </button>
-                    <button
-                      onClick={() => handleDeleteChart(chart.id)}
+                <button
+                  onClick={() => handleDeleteChart(chart.id)}
                       className="text-red-600 hover:text-red-800 text-sm font-medium"
                       title="Delete Chart"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                >
+                  Delete
+                </button>
+              </div>
                 </div>
                 
                 {/* Chart Container */}
-                <div className="h-80 bg-white rounded border border-gray-200 p-4 relative">
-                  {renderChart(chart)}
-                </div>
+                <div 
+                  ref={(el) => {
+                    chartRefs.current[chart.id] = el
+                  }}
+                  className="h-80 bg-white rounded border border-gray-200 p-4 relative"
+                >
+                {renderChart(chart)}
               </div>
-            ))}
+            </div>
+          ))}
           </div>
         </div>
       )}
@@ -622,13 +984,13 @@ const CreateChartModal = ({
         y_axis_columns: yAxisColumns,
       })
     } else {
-      onCreate({
-        spreadsheet: spreadsheetId,
-        chart_type: chartType,
-        title,
-        x_axis_column: xAxisColumn as number,
-        y_axis_columns: yAxisColumns,
-      })
+    onCreate({
+      spreadsheet: spreadsheetId,
+      chart_type: chartType,
+      title,
+      x_axis_column: xAxisColumn as number,
+      y_axis_columns: yAxisColumns,
+    })
     }
   }
 
@@ -707,11 +1069,11 @@ const CreateChartModal = ({
               {availableColumns.length === 0 ? (
                 <p className="text-gray-400 text-sm">No columns with data available</p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {availableColumns.map((col) => (
-                    <button
+            <div className="flex flex-wrap gap-2">
+              {availableColumns.map((col) => (
+                <button
                       key={col.index}
-                      type="button"
+                  type="button"
                       onClick={() => toggleYColumn(col.index)}
                       disabled={col.index === xAxisColumn}
                       className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
@@ -723,8 +1085,8 @@ const CreateChartModal = ({
                       }`}
                     >
                       {col.name} (C{col.index + 1})
-                    </button>
-                  ))}
+                </button>
+              ))}
                 </div>
               )}
             </div>
