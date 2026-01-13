@@ -47,7 +47,7 @@ const Dashboard = () => {
       toast.success('Spreadsheet created successfully')
       setShowCreateModal(false)
       setNewSpreadsheetName('')
-      navigate(`/Excel/spreadsheet/${spreadsheet.id}`)
+      navigate(`/minitab/spreadsheet/${spreadsheet.id}`)
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to create spreadsheet')
     }
@@ -111,7 +111,7 @@ const Dashboard = () => {
                   }
                   
                   // Navigate to the new spreadsheet
-                  navigate(`/Excel/spreadsheet/${spreadsheet.id}`)
+                  navigate(`/minitab/spreadsheet/${spreadsheet.id}`)
                 } catch (error: any) {
                   console.error('Error creating spreadsheet:', error)
                   const errorMessage = error.response?.data?.error || 
@@ -340,7 +340,7 @@ const Dashboard = () => {
                     {spreadsheets.map((spreadsheet) => (
                       <Link
                         key={spreadsheet.id}
-                        to={`/Excel/spreadsheet/${spreadsheet.id}`}
+                        to={`/minitab/spreadsheet/${spreadsheet.id}`}
                         className="block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors"
                       >
                         <div className="grid grid-cols-12 gap-4 items-center">
