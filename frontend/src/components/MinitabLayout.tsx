@@ -132,7 +132,7 @@ const MinitabLayout = () => {
                 <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
               </svg>
             </div>
-            <span className="font-semibold text-gray-800">Minitab® Statistical Software</span>
+            <span className="font-semibold text-gray-800">Excel® Statistical Software</span>
             
             {/* File Name Dropdown */}
             <div className="flex items-center gap-1 px-2 py-1 border border-gray-300 rounded text-sm">
@@ -846,7 +846,7 @@ const MinitabLayout = () => {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
-                <span>Open from Minitab Connect®</span>
+                <span>Open from Excel Connect®</span>
               </div>
 
               <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded mb-1 cursor-pointer">

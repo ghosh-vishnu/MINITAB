@@ -286,7 +286,7 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
         pdf.rect(0, 0, pdfWidth, 25, 'F')
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
-        pdf.text('Minitab® Statistical Software', margin, 12)
+        pdf.text('Excel® Statistical Software', margin, 12)
         pdf.setFontSize(9)
         pdf.setFont('helvetica', 'normal')
         pdf.text('Chart Analysis Report', margin, 18)
@@ -390,27 +390,27 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
       // Company Header Section (Top Left)
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('BEACON', margin, topMargin)
+      pdf.text('Venturing Digitally', margin, topMargin)
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'normal')
-      pdf.text('Pharmaceuticals PLC', margin, topMargin + 5)
+      pdf.text('Software Services', margin, topMargin + 5)
       pdf.setFontSize(8)
       pdf.setFont('helvetica', 'italic')
-      pdf.text('Light for life.', margin, topMargin + 9)
+      pdf.text('We Build Solution.', margin, topMargin + 9)
 
       // Company Header Section (Top Right)
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'bold')
-      const rightText = 'BEACON PHARMACEUTICALS PLC'
+      const rightText = 'Venturing Digitally Pvt. Ltd'
       pdf.text(rightText, pdfWidth - margin, topMargin, { align: 'right' })
       pdf.setFontSize(8)
       pdf.setFont('helvetica', 'normal')
-      pdf.text('Bhaluka, Mymensingh, Bangladesh', pdfWidth - margin, topMargin + 5, { align: 'right' })
+      pdf.text('Sakchi, Jamsedpur, Jharkhand', pdfWidth - margin, topMargin + 5, { align: 'right' })
 
       // Main Title
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Pie Chart Analysis Flow Chart of Mini Tab Software', pdfWidth / 2, topMargin + 20, { align: 'center' })
+      pdf.text('Pie Chart Analysis Flow Chart of Excel Software', pdfWidth / 2, topMargin + 20, { align: 'center' })
 
       // Document Details Table
       const tableY = topMargin + 30
@@ -432,14 +432,14 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
       // Table rows
       const tableData = [
         ['Title', '', ''],
-        ['Reference Document No.', 'SOP/QA/GEN/018/09', ''],
-        ['Originated By', 'Phy', '17.09.25'],
+        ['Reference Document No.', 'xxxxxxx', ''],
+        ['Originated By', 'Phy', '13.01.26'],
         ['Annexure-4', '', ''],
-        ['Page No.', '13 of 13', ''],
-        ['Approved By', '', '20.09.29'],
-        ['Issue Date', '21 SEP 2025', ''],
+        ['Page No.', '01 of 01', ''],
+        ['Approved By', '', '13.01.26'],
+        ['Issue Date', '13 Jan 2026', ''],
         ['Effective Date', '21 SEP 2025', ''],
-        ['Review Date', '20 SEP 2028', ''],
+        ['Review Date', '13 Jan 2025', ''],
       ]
       
       let currentY = tableY
