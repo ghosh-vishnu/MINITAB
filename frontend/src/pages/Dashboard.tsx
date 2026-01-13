@@ -47,7 +47,7 @@ const Dashboard = () => {
       toast.success('Spreadsheet created successfully')
       setShowCreateModal(false)
       setNewSpreadsheetName('')
-      navigate(`/minitab/spreadsheet/${spreadsheet.id}`)
+      navigate(`/Excel/spreadsheet/${spreadsheet.id}`)
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to create spreadsheet')
     }
@@ -87,7 +87,7 @@ const Dashboard = () => {
         <div className="mb-12">
           <h2 className="text-2xl font-semibold text-gray-900 mb-6">New</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-            {/* Analytics - Minitab Statistical Software */}
+            {/* Analytics - Excel Statistical Software */}
             <button
               onClick={async () => {
                 // Create a new spreadsheet and open it
@@ -111,7 +111,7 @@ const Dashboard = () => {
                   }
                   
                   // Navigate to the new spreadsheet
-                  navigate(`/minitab/spreadsheet/${spreadsheet.id}`)
+                  navigate(`/Excel/spreadsheet/${spreadsheet.id}`)
                 } catch (error: any) {
                   console.error('Error creating spreadsheet:', error)
                   const errorMessage = error.response?.data?.error || 
@@ -127,7 +127,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Minitab® Statistical Software</h3>
+              <h3 className="font-semibold text-gray-900 mb-1">Excel® Statistical Software</h3>
               <p className="text-sm text-gray-600">Analytics</p>
             </button>
 
@@ -138,7 +138,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Minitab Brainstorm</h3>
+              <h3 className="font-semibold text-gray-900 mb-1">Excel Brainstorm</h3>
               <p className="text-sm text-gray-600">Brainstorm</p>
             </div>
 
@@ -149,7 +149,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Minitab Data Center</h3>
+              <h3 className="font-semibold text-gray-900 mb-1">Excel Data Center</h3>
               <p className="text-sm text-gray-600">Data Prep</p>
             </div>
 
@@ -160,7 +160,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Minitab Dashboards</h3>
+              <h3 className="font-semibold text-gray-900 mb-1">Excel Dashboards</h3>
               <p className="text-sm text-gray-600">Dashboard</p>
             </div>
 
@@ -171,7 +171,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Minitab Workspace®</h3>
+              <h3 className="font-semibold text-gray-900 mb-1">Excel Workspace®</h3>
               <p className="text-sm text-gray-600">Quality Project</p>
             </div>
           </div>
@@ -221,7 +221,7 @@ const Dashboard = () => {
                   <div className="w-5 h-5 rounded-full border-2 border-blue-600 flex items-center justify-center">
                     <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
                   </div>
-                  <span>Minitab Connect®</span>
+                  <span>Excel Connect®</span>
                 </button>
                 <button
                   onClick={() => setContentTab('onedrive')}
@@ -340,7 +340,7 @@ const Dashboard = () => {
                     {spreadsheets.map((spreadsheet) => (
                       <Link
                         key={spreadsheet.id}
-                        to={`/minitab/spreadsheet/${spreadsheet.id}`}
+                        to={`/Excel/spreadsheet/${spreadsheet.id}`}
                         className="block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors"
                       >
                         <div className="grid grid-cols-12 gap-4 items-center">

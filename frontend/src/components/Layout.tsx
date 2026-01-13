@@ -45,7 +45,7 @@ const Layout = () => {
             <div className="w-8 h-8 bg-blue-600 transform rotate-45 flex items-center justify-center">
               <div className="w-4 h-4 bg-white transform -rotate-45"></div>
             </div>
-            <h1 className="text-xl font-semibold text-gray-900">Minitab Solution Center</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Excel Center</h1>
           </div>
         </div>
 
