@@ -5,6 +5,44 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from .models import User
+from django.utils import timezone
+
+
+class ChildUserCreateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password_confirm = serializers.CharField(write_only=True, required=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'password', 'password_confirm', 'full_name', 'is_active')
+        read_only_fields = ('id',)
+
+    def validate(self, attrs):
+        if attrs.get('password') != attrs.get('password_confirm'):
+            raise serializers.ValidationError({'password': "Password fields didn't match."})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('password_confirm', None)
+        password = validated_data.pop('password')
+        # created_by and user_type will be set in the view
+        user = User(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            full_name=validated_data.get('full_name', ''),
+            is_active=validated_data.get('is_active', True),
+            date_joined=timezone.now(),
+        )
+        user.set_password(password)
+        user.save()
+        return user
+
+
+class ChildUserListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'full_name', 'is_active', 'created_at')
+        read_only_fields = ('id', 'created_at')
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):

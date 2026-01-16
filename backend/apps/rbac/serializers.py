@@ -65,6 +65,12 @@ class RoleSerializer(serializers.ModelSerializer):
         
         return instance
 
+    def get_permissions(self, obj):
+        """Return permissions attached to this role."""
+        # RolePermission links Role -> Permission. use the related_name 'role_permissions'
+        permissions = Permission.objects.filter(role_permissions__role=obj).distinct()
+        return PermissionSerializer(permissions, many=True).data
+
 
 class RolePermissionSerializer(serializers.ModelSerializer):
     """Serializer for RolePermission model."""
@@ -111,7 +117,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'is_active', 'is_staff', 'is_superuser', 'date_joined', 'last_login',
-            'roles', 'role_ids', 'permissions', 'is_super_admin'
+            'roles', 'role_ids', 'permissions', 'is_super_admin', 'user_type', 'full_name'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login', 'is_superuser']
     

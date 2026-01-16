@@ -15,6 +15,11 @@ from .serializers import (
 )
 from apps.rbac.serializers import UserSerializer as RBACUserSerializer
 from apps.rbac.utils import log_activity, get_client_ip, get_user_agent
+from .permissions import IsSuperUser
+from .serializers import ChildUserCreateSerializer, ChildUserListSerializer
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
@@ -129,4 +134,45 @@ def user_profile_view(request):
     # Use RBAC serializer to include roles and permissions
     serializer = RBACUserSerializer(request.user, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ChildUserListCreateView(generics.ListCreateAPIView):
+    """List child users created by the logged-in superuser, and create child users.
+
+    Only accessible to superusers.
+    """
+    permission_classes = [IsAuthenticated, IsSuperUser]
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return ChildUserCreateSerializer
+        return ChildUserListSerializer
+
+    def get_queryset(self):
+        # Return only child users created by this super user
+        return User.objects.filter(created_by=self.request.user, user_type='CHILD').order_by('-created_at')
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        # Set audit fields and mark as child
+        user.created_by = self.request.user
+        user.user_type = 'CHILD'
+        user.save()
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsSuperUser])
+def toggle_user_status(request, id):
+    """Enable or disable a child user. Only superuser who created the child user may toggle."""
+    try:
+        user = get_object_or_404(User, id=id, created_by=request.user)
+        is_active = request.data.get('is_active')
+        if is_active is None:
+            return Response({'error': 'is_active (boolean) is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.is_active = bool(is_active)
+        user.save()
+        return Response({'id': str(user.id), 'is_active': user.is_active}, status=status.HTTP_200_OK)
+    except Exception:
+        return Response({'error': 'Unable to update user status.'}, status=status.HTTP_400_BAD_REQUEST)
 
