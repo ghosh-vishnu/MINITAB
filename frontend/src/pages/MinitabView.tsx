@@ -3,7 +3,7 @@
  * Complete Minitab interface with grid, analysis, and charts
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { spreadsheetsAPI, Spreadsheet, Cell } from '../api/spreadsheets'
 import MinitabGrid from '../components/MinitabGrid'
@@ -18,6 +18,10 @@ const MinitabView = () => {
   const [cells, setCells] = useState<Cell[]>([])
   const [loading, setLoading] = useState(true)
   const [activeView, setActiveView] = useState<'data' | 'analysis' | 'charts'>('data')
+  const [isSaving, setIsSaving] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showRenameModal, setShowRenameModal] = useState(false)
+  const [newFileName, setNewFileName] = useState('')
 
   useEffect(() => {
     if (id && id !== 'undefined') {
@@ -67,7 +71,101 @@ const MinitabView = () => {
 
   const handleCellsUpdate = (updatedCells: Cell[]) => {
     setCells(updatedCells)
+    setHasUnsavedChanges(true)
   }
+
+  const handleSaveSpreadsheet = useCallback(async () => {
+    if (!id || !spreadsheet) return
+
+    // If file is still "Untitled", ask for a proper name first
+    if (spreadsheet.name === 'Untitled' || spreadsheet.name === '') {
+      setNewFileName(spreadsheet.name)
+      setShowRenameModal(true)
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      
+      // Save all cells to backend
+      if (cells.length > 0) {
+        await spreadsheetsAPI.bulkUpdateCells(id, cells)
+      }
+      
+      // Update spreadsheet metadata
+      await spreadsheetsAPI.update(id, {
+        name: spreadsheet.name,
+      })
+      
+      // Reload fresh data from backend to ensure sync
+      const refreshedSpreadsheet = await spreadsheetsAPI.get(id)
+      setSpreadsheet(refreshedSpreadsheet)
+      
+      setHasUnsavedChanges(false)
+      toast.success('Spreadsheet saved successfully')
+    } catch (error: any) {
+      console.error('Error saving spreadsheet:', error)
+      toast.error('Failed to save spreadsheet')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [id, spreadsheet, cells])
+
+  const handleSaveWithNewName = useCallback(async () => {
+    if (!id || !spreadsheet || !newFileName.trim()) {
+      toast.error('Please enter a file name')
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      
+      // Update spreadsheet name first
+      const updatedSpreadsheet = await spreadsheetsAPI.update(id, {
+        name: newFileName.trim(),
+      })
+
+      // Save all cells to backend
+      if (cells.length > 0) {
+        await spreadsheetsAPI.bulkUpdateCells(id, cells)
+      }
+      
+      // Reload fresh data from backend to ensure sync
+      const refreshedSpreadsheet = await spreadsheetsAPI.get(id)
+      setSpreadsheet(refreshedSpreadsheet)
+      
+      setShowRenameModal(false)
+      setNewFileName('')
+      setHasUnsavedChanges(false)
+      toast.success('Spreadsheet saved successfully')
+    } catch (error: any) {
+      console.error('Error saving spreadsheet:', error)
+      toast.error('Failed to save spreadsheet')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [id, spreadsheet, cells, newFileName])
+
+  // Update document title when spreadsheet name or save status changes
+  useEffect(() => {
+    if (spreadsheet) {
+      const title = hasUnsavedChanges 
+        ? `${spreadsheet.name} - Not currently saved`
+        : spreadsheet.name
+      document.title = title
+    }
+  }, [spreadsheet, hasUnsavedChanges])
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSaveSpreadsheet()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleSaveSpreadsheet])
 
   if (loading) {
     return (
@@ -95,6 +193,42 @@ const MinitabView = () => {
 
   return (
     <div className="minitab-view h-full flex flex-col">
+      {/* Header with Save Button */}
+      <div className="border-b border-gray-300 bg-white px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-gray-900">{spreadsheet.name}</h1>
+          {hasUnsavedChanges && (
+            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+              Not saved
+            </span>
+          )}
+        </div>
+        <button
+          onClick={handleSaveSpreadsheet}
+          disabled={isSaving || !hasUnsavedChanges}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+            hasUnsavedChanges
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+          }`}
+        >
+          <svg
+            className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          {isSaving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+
       {/* View Tabs */}
       <div className="border-b border-gray-300 bg-white">
         <div className="flex items-center px-4">
@@ -141,6 +275,10 @@ const MinitabView = () => {
             cells={cells}
             onCellsUpdate={handleCellsUpdate}
             spreadsheetName={spreadsheet.name}
+            worksheetNames={spreadsheet.worksheet_names || {}}
+            onWorksheetNamesUpdate={async (names) => {
+              await spreadsheetsAPI.saveWorksheetNames(spreadsheet.id, names)
+            }}
           />
         )}
 
@@ -156,6 +294,47 @@ const MinitabView = () => {
           </div>
         )}
       </div>
+
+      {/* Save As Modal */}
+      {showRenameModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-lg">
+            <h2 className="text-xl font-bold mb-4 text-gray-900">Save As</h2>
+            <p className="text-sm text-gray-600 mb-4">Please enter a name for your spreadsheet:</p>
+            <input
+              type="text"
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              placeholder="e.g., Sales Report, Budget 2026"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleSaveWithNewName()
+                }
+              }}
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowRenameModal(false)
+                  setNewFileName('')
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveWithNewName}
+                disabled={isSaving}
+                className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors disabled:bg-gray-400"
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -305,7 +305,7 @@ const Dashboard = () => {
                   <div className="col-span-4">Name</div>
                   <div className="col-span-2">Opened ^</div>
                   <div className="col-span-3">Repository</div>
-                  <div className="col-span-3">Account</div>
+                  <div className="col-span-3">Account & Actions</div>
                 </div>
               </div>
 
@@ -341,7 +341,7 @@ const Dashboard = () => {
                       <Link
                         key={spreadsheet.id}
                         to={`/minitab/spreadsheet/${spreadsheet.id}`}
-                        className="block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors"
+                        className="block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors group"
                       >
                         <div className="grid grid-cols-12 gap-4 items-center">
                           <div className="col-span-4 flex items-center gap-3">
@@ -354,11 +354,11 @@ const Dashboard = () => {
                             {new Date(spreadsheet.updated_at).toLocaleDateString()}
                           </div>
                           <div className="col-span-3 text-sm text-gray-600">Local</div>
-                          <div className="col-span-3 flex items-center justify-between">
+                          <div className="col-span-3 flex items-center justify-between gap-3">
                             <span className="text-sm text-gray-600">{getUserInitials()}</span>
                             <button
                               onClick={(e) => handleDeleteSpreadsheet(spreadsheet.id, e)}
-                              className="text-red-600 hover:text-red-800 text-sm opacity-0 group-hover:opacity-100"
+                              className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded text-sm font-medium transition-colors"
                             >
                               Delete
                             </button>

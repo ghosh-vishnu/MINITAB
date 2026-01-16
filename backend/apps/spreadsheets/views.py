@@ -110,6 +110,30 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
+    def save_worksheet_names(self, request, pk=None):
+        """
+        Save worksheet names for a spreadsheet.
+        """
+        spreadsheet = self.get_object()
+        worksheet_names = request.data.get('worksheet_names', {})
+        
+        spreadsheet.worksheet_names = worksheet_names
+        spreadsheet.save()
+        
+        log_activity(
+            user=self.request.user,
+            action_type='update',
+            model_name='Spreadsheet',
+            description=f"Updated worksheet names in spreadsheet: {spreadsheet.name}",
+            object_id=spreadsheet.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        
+        serializer = SpreadsheetSerializer(spreadsheet)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['post'])
     def update_cells(self, request, pk=None):
         """
         Bulk update cells for a spreadsheet.

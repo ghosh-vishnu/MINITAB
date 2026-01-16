@@ -19,6 +19,7 @@ export interface Spreadsheet {
   is_public: boolean
   user: string
   cells?: Cell[]
+  worksheet_names?: Record<string, string>
   created_at: string
   updated_at: string
 }
@@ -96,6 +97,14 @@ export const spreadsheetsAPI = {
 
   bulkUpdateCells: async (id: string, cells: Cell[]): Promise<void> => {
     await api.post(`/spreadsheets/${id}/update_cells/`, { cells })
+  },
+
+  saveWorksheetNames: async (id: string, worksheetNames: Record<string, string>): Promise<Spreadsheet> => {
+    const response = await api.post<Spreadsheet>(
+      `/spreadsheets/${id}/save_worksheet_names/`,
+      { worksheet_names: worksheetNames }
+    )
+    return response.data
   },
 
   importCSV: async (id: string, file: File): Promise<any> => {

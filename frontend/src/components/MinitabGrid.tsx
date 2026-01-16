@@ -25,6 +25,8 @@ interface MinitabGridProps {
   cells: Cell[]
   onCellsUpdate: (cells: Cell[]) => void
   spreadsheetName?: string
+  worksheetNames?: Record<string, string>
+  onWorksheetNamesUpdate?: (names: Record<string, string>) => Promise<void>
 }
 
 interface WorksheetData {
@@ -40,6 +42,8 @@ const MinitabGrid = ({
   cells,
   onCellsUpdate,
   spreadsheetName = 'Worksheet 1',
+  worksheetNames = {},
+  onWorksheetNamesUpdate,
 }: MinitabGridProps) => {
   const gridRef = useRef<AgGridReact>(null)
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
@@ -89,6 +93,19 @@ const MinitabGrid = ({
       }))
     }
   }, [cells]) // Only when cells prop changes from parent
+
+  // Load worksheet names from backend
+  useEffect(() => {
+    if (worksheetNames && Object.keys(worksheetNames).length > 0) {
+      setWorksheets(prev => prev.map(ws => {
+        const newName = worksheetNames[String(ws.id)]
+        if (newName && newName !== ws.name) {
+          return { ...ws, name: newName }
+        }
+        return ws
+      }))
+    }
+  }, [worksheetNames])
 
   // Create column definitions with C1, C2, C3 format
   const columnDefs = useMemo<ColDef[]>(() => {
@@ -285,13 +302,26 @@ const MinitabGrid = ({
         cells: [] // Empty cells for new worksheet
       }
 
-      return [...updated, newWorksheet]
+      const result = [...updated, newWorksheet]
+      
+      // Save worksheet names to backend
+      if (onWorksheetNamesUpdate) {
+        const names: Record<string, string> = {}
+        result.forEach(ws => {
+          names[String(ws.id)] = ws.name
+        })
+        onWorksheetNamesUpdate(names).catch(() => {
+          toast.error('Failed to save worksheet names')
+        })
+      }
+      
+      return result
     })
 
     // Switch to new tab
     const newTabId = Math.max(...worksheets.map(ws => ws.id), 0) + 1
     setActiveTab(newTabId)
-  }, [worksheets, activeTab, saveCurrentGridData])
+  }, [worksheets, activeTab, saveCurrentGridData, onWorksheetNamesUpdate])
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
     params.api.sizeColumnsToFit()
@@ -460,7 +490,21 @@ const MinitabGrid = ({
     
     setEditingTabId(null)
     toast.success('Worksheet renamed')
-  }, [editingTabName])
+    
+    // Save to backend
+    if (onWorksheetNamesUpdate) {
+      setWorksheets(prev => {
+        const names: Record<string, string> = {}
+        prev.forEach(ws => {
+          names[String(ws.id)] = ws.name
+        })
+        onWorksheetNamesUpdate(names).catch(() => {
+          toast.error('Failed to save worksheet names')
+        })
+        return prev
+      })
+    }
+  }, [editingTabName, onWorksheetNamesUpdate])
 
   // Handle inline rename cancel
   const handleInlineRenameCancel = useCallback(() => {
@@ -487,7 +531,21 @@ const MinitabGrid = ({
     
     setRenameModal(null)
     toast.success('Worksheet renamed')
-  }, [renameModal])
+    
+    // Save to backend
+    if (onWorksheetNamesUpdate) {
+      setWorksheets(prev => {
+        const names: Record<string, string> = {}
+        prev.forEach(ws => {
+          names[String(ws.id)] = ws.name
+        })
+        onWorksheetNamesUpdate(names).catch(() => {
+          toast.error('Failed to save worksheet names')
+        })
+        return prev
+      })
+    }
+  }, [renameModal, onWorksheetNamesUpdate])
 
   // Handle duplicate worksheet
   const handleDuplicateWorksheet = useCallback((worksheetId: number) => {
@@ -501,11 +559,27 @@ const MinitabGrid = ({
       cells: [...worksheet.cells], // Deep copy of cells
     }
 
-    setWorksheets(prev => [...prev, duplicatedWorksheet])
+    setWorksheets(prev => {
+      const result = [...prev, duplicatedWorksheet]
+      
+      // Save worksheet names to backend
+      if (onWorksheetNamesUpdate) {
+        const names: Record<string, string> = {}
+        result.forEach(ws => {
+          names[String(ws.id)] = ws.name
+        })
+        onWorksheetNamesUpdate(names).catch(() => {
+          toast.error('Failed to save worksheet names')
+        })
+      }
+      
+      return result
+    })
+    
     setActiveTab(newTabId)
     closeContextMenu()
     toast.success('Worksheet duplicated')
-  }, [worksheets, closeContextMenu])
+  }, [worksheets, closeContextMenu, onWorksheetNamesUpdate])
 
   // Handle export worksheet
   const handleExportWorksheet = useCallback(async (worksheetId: number) => {

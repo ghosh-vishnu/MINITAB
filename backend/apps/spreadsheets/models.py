@@ -24,6 +24,7 @@ class Spreadsheet(models.Model):
     row_count = models.IntegerField(default=100)
     column_count = models.IntegerField(default=26)
     is_public = models.BooleanField(default=False)
+    worksheet_names = models.JSONField(default=dict, blank=True)  # {1: 'Sheet1', 2: 'Sheet2', ...}
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
