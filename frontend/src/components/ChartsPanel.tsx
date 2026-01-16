@@ -410,7 +410,7 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
       // Main Title
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Pie Chart Analysis Flow Chart of Excel Software', pdfWidth / 2, topMargin + 20, { align: 'center' })
+      pdf.text('Chart Analysis Flow Chart of Excel Software', pdfWidth / 2, topMargin + 20, { align: 'center' })
 
       // Document Details Table
       const tableY = topMargin + 30
@@ -553,7 +553,7 @@ const ChartsPanel = ({ spreadsheetId, cells }: ChartsPanelProps) => {
       pdf.text('MASTER COPY', 10, pdfHeight / 2, { angle: 90, align: 'center' })
       
       pdf.setTextColor(255, 0, 0) // Red
-      pdf.text('Information Copy', pdfWidth - 10, pdfHeight / 2, { angle: 90, align: 'center' })
+      pdf.text('', pdfWidth - 10, pdfHeight / 2, { angle: 90, align: 'center' })
       
       // Reset text color
       pdf.setTextColor(0, 0, 0)

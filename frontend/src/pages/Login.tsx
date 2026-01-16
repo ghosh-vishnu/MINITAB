@@ -119,7 +119,7 @@ const Login = () => {
               )}
             </div>
 
-            {/* Keep me signed in */}
+            {/* Keep me signed in
             <div className="flex items-start">
               <input
                 type="checkbox"
@@ -134,7 +134,7 @@ const Login = () => {
                   Not recommended on shared devices
                 </p>
               </div>
-            </div>
+            </div> */}
 
             {/* Forgot Password */}
             <div>
@@ -157,7 +157,7 @@ const Login = () => {
 
           
 
-            {/* Cookies Settings */}
+            {/* Cookies Settings
             <div className="pt-2 text-center">
               <Link
                 to="/cookies"
@@ -165,7 +165,7 @@ const Login = () => {
               >
                 Cookies Settings
               </Link>
-            </div>
+            </div> */}
           </form>
         </div>
 
