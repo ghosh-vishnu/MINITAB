@@ -74,9 +74,13 @@ const Layout = () => {
 
           {/* User Profile */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+            <button
+              onClick={() => navigate('/profile')}
+              className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium cursor-pointer"
+              aria-label="Open profile"
+            >
               {getUserInitials()}
-            </div>
+            </button>
             <button
               onClick={handleLogout}
               className="text-sm text-gray-600 hover:text-gray-900"
