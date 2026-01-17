@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { spreadsheetsAPI, Spreadsheet, Cell } from '../api/spreadsheets'
+import { spreadsheetsAPI, Spreadsheet, Cell, Worksheet } from '../api/spreadsheets'
 import { analysisAPI } from '../api/analysis'
 import { chartsAPI, Chart } from '../api/charts'
 import SpreadsheetGrid from '../components/SpreadsheetGrid'
 import ExcelSpreadsheet from '../components/ExcelSpreadsheet'
 import AnalysisPanel from '../components/AnalysisPanel'
 import ChartsPanel from '../components/ChartsPanel'
+import SheetTabs from '../components/SheetTabs'
 import toast from 'react-hot-toast'
 
 const SpreadsheetView = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [spreadsheet, setSpreadsheet] = useState<Spreadsheet | null>(null)
+  const [worksheets, setWorksheets] = useState<Worksheet[]>([])
+  const [activeWorksheet, setActiveWorksheet] = useState<Worksheet | null>(null)
   const [cells, setCells] = useState<Cell[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'spreadsheet' | 'analysis' | 'charts'>('spreadsheet')
@@ -25,17 +28,32 @@ const SpreadsheetView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // Load worksheet cells when active worksheet changes
+  useEffect(() => {
+    if (id && activeWorksheet) {
+      loadWorksheetCells(activeWorksheet.id)
+    }
+  }, [activeWorksheet])
+
   const loadSpreadsheet = async () => {
     if (!id) return
 
     try {
       setLoading(true)
-      const [spreadsheetData, cellsData] = await Promise.all([
-        spreadsheetsAPI.get(id),
-        spreadsheetsAPI.getCells(id),
-      ])
+      const spreadsheetData = await spreadsheetsAPI.get(id)
       setSpreadsheet(spreadsheetData)
-      setCells(cellsData)
+
+      // Load worksheets
+      const worksheetsData = await spreadsheetsAPI.getWorksheets(id)
+      setWorksheets(worksheetsData)
+
+      // Set the first active worksheet or the marked active one
+      const activeWs = worksheetsData.find((ws) => ws.is_active) || worksheetsData[0]
+      if (activeWs) {
+        setActiveWorksheet(activeWs)
+        const worksheetCells = await spreadsheetsAPI.getWorksheetCells(id, activeWs.id)
+        setCells(worksheetCells)
+      }
     } catch (error: any) {
       toast.error('Failed to load spreadsheet')
       console.error(error)
@@ -45,8 +63,99 @@ const SpreadsheetView = () => {
     }
   }
 
-  const handleCellsUpdate = (updatedCells: Cell[]) => {
+  const loadWorksheetCells = async (worksheetId: string) => {
+    if (!id) return
+
+    try {
+      const worksheetCells = await spreadsheetsAPI.getWorksheetCells(id, worksheetId)
+      setCells(worksheetCells)
+    } catch (error: any) {
+      toast.error('Failed to load worksheet cells')
+      console.error(error)
+    }
+  }
+
+  const handleSelectWorksheet = async (worksheet: Worksheet) => {
+    if (!id) return
+
+    try {
+      await spreadsheetsAPI.setActiveWorksheet(id, worksheet.id)
+      setActiveWorksheet(worksheet)
+      
+      // Update the worksheets list to reflect the active state
+      const updatedWorksheets = worksheets.map((ws) => ({
+        ...ws,
+        is_active: ws.id === worksheet.id,
+      }))
+      setWorksheets(updatedWorksheets)
+    } catch (error: any) {
+      toast.error('Failed to switch worksheet')
+      console.error(error)
+    }
+  }
+
+  const handleAddWorksheet = async (name: string): Promise<Worksheet> => {
+    if (!id) throw new Error('Spreadsheet ID is required')
+
+    const newWorksheet = await spreadsheetsAPI.createWorksheet(id, name)
+    
+    // Update worksheets list
+    const updatedWorksheets = [...worksheets, newWorksheet]
+    setWorksheets(updatedWorksheets)
+    
+    // Activate the new worksheet on backend
+    await spreadsheetsAPI.setActiveWorksheet(id, newWorksheet.id)
+    
+    // Set as active on frontend
+    const activeWs = { ...newWorksheet, is_active: true }
+    setActiveWorksheet(activeWs)
+    setCells([]) // Clear cells for the new empty worksheet
+    
+    toast.success(`Sheet '${name}' created`)
+    return activeWs
+  }
+
+  const handleRenameWorksheet = async (worksheetId: string, newName: string) => {
+    if (!id) return
+
+    await spreadsheetsAPI.renameWorksheet(id, worksheetId, newName)
+    const updatedWorksheets = worksheets.map((ws) =>
+      ws.id === worksheetId ? { ...ws, name: newName } : ws
+    )
+    setWorksheets(updatedWorksheets)
+    
+    // Update active worksheet if it's the renamed one
+    if (activeWorksheet?.id === worksheetId) {
+      setActiveWorksheet({ ...activeWorksheet, name: newName })
+    }
+  }
+
+  const handleDeleteWorksheet = async (worksheetId: string) => {
+    if (!id) return
+
+    await spreadsheetsAPI.deleteWorksheet(id, worksheetId)
+    const updatedWorksheets = worksheets.filter((ws) => ws.id !== worksheetId)
+    setWorksheets(updatedWorksheets)
+
+    // If deleted worksheet was active, switch to the first remaining one
+    if (activeWorksheet?.id === worksheetId && updatedWorksheets.length > 0) {
+      handleSelectWorksheet(updatedWorksheets[0])
+    }
+  }
+
+  const handleCellsUpdate = async (updatedCells: Cell[]) => {
     setCells(updatedCells)
+    
+    // Save cells to backend immediately (with debounce via SpreadsheetGrid's setTimeout)
+    if (id && activeWorksheet) {
+      try {
+        await spreadsheetsAPI.updateWorksheetCells(id, activeWorksheet.id, updatedCells)
+        // Don't show success toast for every cell change to avoid spam
+      } catch (error: any) {
+        // Show error toast when save fails
+        toast.error('Failed to save cell to database: ' + (error.response?.data?.error || error.message))
+      }
+    }
   }
 
   const handleFileImport = async (file: File, type: 'csv' | 'excel') => {
@@ -116,7 +225,7 @@ const SpreadsheetView = () => {
   }
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{spreadsheet.name}</h1>
@@ -182,14 +291,31 @@ const SpreadsheetView = () => {
       </div>
 
       {activeTab === 'spreadsheet' && (
-        <div className="w-full">
-          <SpreadsheetGrid
-            spreadsheetId={spreadsheet.id}
-            rowCount={spreadsheet.row_count}
-            columnCount={spreadsheet.column_count}
-            cells={cells}
-            onCellsUpdate={handleCellsUpdate}
-          />
+        <div className="w-full flex flex-col flex-1">
+          {/* Sheet Tabs */}
+          {worksheets.length > 0 && activeWorksheet && (
+            <SheetTabs
+              spreadsheetId={spreadsheet.id}
+              worksheets={worksheets}
+              activeWorksheet={activeWorksheet}
+              onSelectWorksheet={handleSelectWorksheet}
+              onAddWorksheet={handleAddWorksheet}
+              onRenameWorksheet={handleRenameWorksheet}
+              onDeleteWorksheet={handleDeleteWorksheet}
+            />
+          )}
+
+          {/* Spreadsheet Grid */}
+          <div className="w-full flex-1">
+            <SpreadsheetGrid
+              spreadsheetId={spreadsheet.id}
+              worksheetId={activeWorksheet?.id}
+              rowCount={spreadsheet.row_count}
+              columnCount={spreadsheet.column_count}
+              cells={cells}
+              onCellsUpdate={handleCellsUpdate}
+            />
+          </div>
         </div>
       )}
 

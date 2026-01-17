@@ -2,7 +2,7 @@
 Serializers for spreadsheets and cells.
 """
 from rest_framework import serializers
-from .models import Spreadsheet, Cell
+from .models import Spreadsheet, Cell, Worksheet
 
 
 class CellSerializer(serializers.ModelSerializer):
@@ -18,18 +18,33 @@ class CellSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'updated_at')
 
 
+class WorksheetSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Worksheet model.
+    """
+    cells = CellSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Worksheet
+        fields = (
+            'id', 'name', 'position', 'is_active', 'cells', 'created_at', 'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+
 class SpreadsheetSerializer(serializers.ModelSerializer):
     """
     Serializer for Spreadsheet model.
     """
     cells = CellSerializer(many=True, read_only=True)
+    worksheets = WorksheetSerializer(many=True, read_only=True)
     user = serializers.StringRelatedField(read_only=True)
     
     class Meta:
         model = Spreadsheet
         fields = (
             'id', 'name', 'description', 'row_count', 'column_count',
-            'is_public', 'user', 'cells', 'worksheet_names', 'created_at', 'updated_at'
+            'is_public', 'user', 'cells', 'worksheets', 'worksheet_names', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'user', 'created_at', 'updated_at')
 

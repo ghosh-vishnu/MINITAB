@@ -10,6 +10,16 @@ export interface Cell {
   style?: Record<string, any>
 }
 
+export interface Worksheet {
+  id: string
+  name: string
+  position: number
+  is_active: boolean
+  cells?: Cell[]
+  created_at: string
+  updated_at: string
+}
+
 export interface Spreadsheet {
   id: string
   name: string
@@ -19,6 +29,7 @@ export interface Spreadsheet {
   is_public: boolean
   user: string
   cells?: Cell[]
+  worksheets?: Worksheet[]
   worksheet_names?: Record<string, string>
   created_at: string
   updated_at: string
@@ -63,6 +74,52 @@ export const spreadsheetsAPI = {
     await api.delete(`/spreadsheets/${id}/`)
   },
 
+  // Worksheet operations
+  getWorksheets: async (id: string): Promise<Worksheet[]> => {
+    const response = await api.get<Worksheet[]>(`/spreadsheets/${id}/worksheets/`)
+    return response.data
+  },
+
+  createWorksheet: async (id: string, name: string): Promise<Worksheet> => {
+    const response = await api.post<Worksheet>(`/spreadsheets/${id}/create_worksheet/`, { name })
+    return response.data
+  },
+
+  renameWorksheet: async (id: string, worksheetId: string, newName: string): Promise<void> => {
+    await api.post(`/spreadsheets/${id}/rename_worksheet/`, {
+      worksheet_id: worksheetId,
+      name: newName,
+    })
+  },
+
+  setActiveWorksheet: async (id: string, worksheetId: string): Promise<Worksheet> => {
+    const response = await api.post<Worksheet>(`/spreadsheets/${id}/set_active_worksheet/`, {
+      worksheet_id: worksheetId,
+    })
+    return response.data
+  },
+
+  deleteWorksheet: async (id: string, worksheetId: string): Promise<void> => {
+    await api.delete(`/spreadsheets/${id}/delete_worksheet/`, {
+      data: { worksheet_id: worksheetId },
+    })
+  },
+
+  getWorksheetCells: async (id: string, worksheetId: string): Promise<Cell[]> => {
+    const response = await api.get<Cell[]>(`/spreadsheets/${id}/worksheet_cells/`, {
+      params: { worksheet_id: worksheetId },
+    })
+    return response.data
+  },
+
+  updateWorksheetCells: async (id: string, worksheetId: string, cells: Cell[]): Promise<void> => {
+    await api.post(`/spreadsheets/${id}/update_worksheet_cells/`, {
+      worksheet_id: worksheetId,
+      cells,
+    })
+  },
+
+  // Cell operations
   getCells: async (id: string): Promise<Cell[]> => {
     const response = await api.get<Cell[]>(`/spreadsheets/${id}/cells/`)
     return response.data
@@ -107,6 +164,7 @@ export const spreadsheetsAPI = {
     return response.data
   },
 
+  // Import/Export operations
   importCSV: async (id: string, file: File): Promise<any> => {
     const formData = new FormData()
     formData.append('file', file)
@@ -146,4 +204,5 @@ export const spreadsheetsAPI = {
     return response.data
   },
 }
+
 

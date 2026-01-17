@@ -105,8 +105,8 @@ export interface UpdateRoleData {
 export const rbacAPI = {
   // Roles
   getRoles: async (): Promise<Role[]> => {
-    const response = await api.get<Role[]>('/rbac/roles/')
-    return response.data
+    const response = await api.get<any>('/rbac/roles/')
+    return response.data.results || response.data
   },
 
   getRole: async (id: string): Promise<Role> => {
@@ -131,8 +131,8 @@ export const rbacAPI = {
   // Permissions
   getPermissions: async (category?: string): Promise<Permission[]> => {
     const params = category ? { category } : {}
-    const response = await api.get<Permission[]>('/rbac/permissions/', { params })
-    return response.data
+    const response = await api.get<any>('/rbac/permissions/', { params })
+    return response.data.results || response.data
   },
 
   getPermission: async (id: string): Promise<Permission> => {
@@ -142,8 +142,8 @@ export const rbacAPI = {
 
   // User Management
   getUsers: async (): Promise<User[]> => {
-    const response = await api.get<User[]>('/rbac/users/')
-    return response.data
+    const response = await api.get<any>('/rbac/users/')
+    return response.data.results || response.data
   },
 
   getUser: async (id: string): Promise<User> => {

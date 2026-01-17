@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 
 interface SpreadsheetGridProps {
   spreadsheetId: string
+  worksheetId?: string
   rowCount: number
   columnCount: number
   cells: Cell[]
@@ -16,6 +17,7 @@ interface SpreadsheetGridProps {
 
 const SpreadsheetGrid = ({
   spreadsheetId,
+  worksheetId,
   rowCount,
   columnCount,
   cells,
@@ -152,16 +154,7 @@ const SpreadsheetGrid = ({
           const isFormula = newValue.trim().startsWith('=')
           const dataType = isFormula ? 'formula' : 'text'
 
-          await spreadsheetsAPI.updateCell(
-            spreadsheetId,
-            rowIndex,
-            columnIndex,
-            newValue,
-            isFormula ? newValue : undefined,
-            dataType
-          )
-
-          // Update local state
+          // Update local state immediately for UI responsiveness
           const updatedCells = [...cells]
           const cellIndex = updatedCells.findIndex(
             (c) => c.row_index === rowIndex && c.column_index === columnIndex
@@ -186,8 +179,7 @@ const SpreadsheetGrid = ({
 
           onCellsUpdate(updatedCells)
         } catch (error: any) {
-          toast.error('Failed to update cell')
-          console.error(error)
+          console.error('Failed to update cell', error)
           // Revert cell value
           params.node?.setDataValue(params.colDef.field, params.oldValue)
         }

@@ -39,6 +39,35 @@ class Spreadsheet(models.Model):
         return f"{self.name} ({self.user.username})"
 
 
+class Worksheet(models.Model):
+    """
+    Worksheet model representing individual sheets in a spreadsheet (workbook).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    spreadsheet = models.ForeignKey(
+        Spreadsheet,
+        on_delete=models.CASCADE,
+        related_name='worksheets',
+        db_index=True
+    )
+    name = models.CharField(max_length=255, default='Sheet1')
+    position = models.IntegerField(default=1)  # Order of sheets
+    is_active = models.BooleanField(default=True)  # Currently selected sheet
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'worksheets'
+        unique_together = [['spreadsheet', 'name']]
+        ordering = ['position']
+        indexes = [
+            models.Index(fields=['spreadsheet', 'position']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} in {self.spreadsheet.name}"
+
+
 class Cell(models.Model):
     """
     Cell model representing individual spreadsheet cells.
@@ -51,11 +80,21 @@ class Cell(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    worksheet = models.ForeignKey(
+        Worksheet,
+        on_delete=models.CASCADE,
+        related_name='cells',
+        db_index=True,
+        null=True,
+        blank=True
+    )
     spreadsheet = models.ForeignKey(
         Spreadsheet,
         on_delete=models.CASCADE,
         related_name='cells',
-        db_index=True
+        db_index=True,
+        null=True,
+        blank=True
     )
     row_index = models.IntegerField()
     column_index = models.IntegerField()
@@ -72,8 +111,9 @@ class Cell(models.Model):
 
     class Meta:
         db_table = 'cells'
-        unique_together = [['spreadsheet', 'row_index', 'column_index']]
+        unique_together = [['worksheet', 'row_index', 'column_index']]
         indexes = [
+            models.Index(fields=['worksheet', 'row_index', 'column_index']),
             models.Index(fields=['spreadsheet', 'row_index', 'column_index']),
         ]
 

@@ -61,8 +61,9 @@ const Dashboard = () => {
 
     try {
       await spreadsheetsAPI.delete(id)
+      // Remove from local state immediately
+      setSpreadsheets(prev => prev.filter(sheet => sheet.id !== id))
       toast.success('Spreadsheet deleted successfully')
-      loadSpreadsheets()
     } catch (error: any) {
       toast.error('Failed to delete spreadsheet')
     }

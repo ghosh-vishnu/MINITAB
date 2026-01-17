@@ -8,12 +8,13 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 
-from .models import Spreadsheet, Cell
+from .models import Spreadsheet, Cell, Worksheet
 from .serializers import (
     SpreadsheetSerializer,
     SpreadsheetListSerializer,
     SpreadsheetCreateSerializer,
     CellSerializer,
+    WorksheetSerializer,
     CellBulkUpdateSerializer
 )
 from .services import DataEngineService
@@ -440,6 +441,233 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         response = HttpResponse(csv_content, content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{spreadsheet.name}.csv"'
         return response
+    
+    @action(detail=True, methods=['get'])
+    def worksheets(self, request, pk=None):
+        """
+        Get all worksheets for a spreadsheet.
+        Auto-create default worksheet if none exist.
+        """
+        spreadsheet = self.get_object()
+        worksheets = spreadsheet.worksheets.all()
+        
+        # Auto-create default worksheet if none exist
+        if not worksheets.exists():
+            Worksheet.objects.create(
+                spreadsheet=spreadsheet,
+                name='Sheet1',
+                position=1,
+                is_active=True
+            )
+            worksheets = spreadsheet.worksheets.all()
+        
+        serializer = WorksheetSerializer(worksheets, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def create_worksheet(self, request, pk=None):
+        """
+        Create a new worksheet in a spreadsheet.
+        """
+        spreadsheet = self.get_object()
+        name = request.data.get('name', f'Sheet{spreadsheet.worksheets.count() + 1}')
+        
+        # Get the next position
+        next_position = spreadsheet.worksheets.count() + 1
+        
+        worksheet = Worksheet.objects.create(
+            spreadsheet=spreadsheet,
+            name=name,
+            position=next_position,
+            is_active=False  # Don't auto-activate new sheets
+        )
+        
+        log_activity(
+            user=self.request.user,
+            action_type='create',
+            model_name='Worksheet',
+            description=f"Created worksheet '{name}' in spreadsheet '{spreadsheet.name}'",
+            object_id=worksheet.id,
+            related_object=spreadsheet,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        
+        serializer = WorksheetSerializer(worksheet)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'])
+    def rename_worksheet(self, request, pk=None):
+        """
+        Rename a worksheet.
+        """
+        spreadsheet = self.get_object()
+        worksheet_id = request.data.get('worksheet_id')
+        new_name = request.data.get('name')
+        
+        if not worksheet_id or not new_name:
+            return Response(
+                {'error': 'worksheet_id and name are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        worksheet = get_object_or_404(Worksheet, id=worksheet_id, spreadsheet=spreadsheet)
+        old_name = worksheet.name
+        worksheet.name = new_name
+        worksheet.save()
+        
+        log_activity(
+            user=self.request.user,
+            action_type='update',
+            model_name='Worksheet',
+            description=f"Renamed worksheet from '{old_name}' to '{new_name}' in spreadsheet '{spreadsheet.name}'",
+            object_id=worksheet.id,
+            related_object=spreadsheet,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        
+        serializer = WorksheetSerializer(worksheet)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['post'])
+    def set_active_worksheet(self, request, pk=None):
+        """
+        Set the active worksheet.
+        """
+        spreadsheet = self.get_object()
+        worksheet_id = request.data.get('worksheet_id')
+        
+        if not worksheet_id:
+            return Response(
+                {'error': 'worksheet_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Deactivate all worksheets
+        spreadsheet.worksheets.all().update(is_active=False)
+        
+        # Activate the selected worksheet
+        worksheet = get_object_or_404(Worksheet, id=worksheet_id, spreadsheet=spreadsheet)
+        worksheet.is_active = True
+        worksheet.save()
+        
+        log_activity(
+            user=self.request.user,
+            action_type='update',
+            model_name='Worksheet',
+            description=f"Activated worksheet '{worksheet.name}' in spreadsheet '{spreadsheet.name}'",
+            object_id=worksheet.id,
+            related_object=spreadsheet,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        
+        serializer = WorksheetSerializer(worksheet)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['delete'])
+    def delete_worksheet(self, request, pk=None):
+        """
+        Delete a worksheet.
+        """
+        spreadsheet = self.get_object()
+        worksheet_id = request.data.get('worksheet_id')
+        
+        if not worksheet_id:
+            return Response(
+                {'error': 'worksheet_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if it's the only worksheet
+        if spreadsheet.worksheets.count() <= 1:
+            return Response(
+                {'error': 'Cannot delete the last worksheet'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        worksheet = get_object_or_404(Worksheet, id=worksheet_id, spreadsheet=spreadsheet)
+        worksheet_name = worksheet.name
+        worksheet.delete()
+        
+        log_activity(
+            user=self.request.user,
+            action_type='delete',
+            model_name='Worksheet',
+            description=f"Deleted worksheet '{worksheet_name}' in spreadsheet '{spreadsheet.name}'",
+            object_id=str(worksheet_id),
+            related_object=spreadsheet,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        
+        return Response(
+            {'message': 'Worksheet deleted successfully'},
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=True, methods=['post'])
+    def update_worksheet_cells(self, request, pk=None):
+        """
+        Update cells for a specific worksheet.
+        """
+        spreadsheet = self.get_object()
+        worksheet_id = request.data.get('worksheet_id')
+        cells_data = request.data.get('cells', [])
+        
+        if not worksheet_id:
+            return Response(
+                {'error': 'worksheet_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        worksheet = get_object_or_404(Worksheet, id=worksheet_id, spreadsheet=spreadsheet)
+        
+        try:
+            with transaction.atomic():
+                for cell_data in cells_data:
+                    Cell.objects.update_or_create(
+                        worksheet=worksheet,
+                        row_index=cell_data['row_index'],
+                        column_index=cell_data['column_index'],
+                        defaults={
+                            'spreadsheet': spreadsheet,
+                            'value': cell_data.get('value'),
+                            'formula': cell_data.get('formula'),
+                            'data_type': cell_data.get('data_type', 'text'),
+                            'style': cell_data.get('style'),
+                        }
+                    )
+            
+            return Response(
+                {'message': 'Cells updated successfully'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=True, methods=['get'])
+    def worksheet_cells(self, request, pk=None):
+        """
+        Get all cells for a specific worksheet.
+        """
+        spreadsheet = self.get_object()
+        worksheet_id = request.query_params.get('worksheet_id')
+        
+        if not worksheet_id:
+            return Response(
+                {'error': 'worksheet_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        worksheet = get_object_or_404(Worksheet, id=worksheet_id, spreadsheet=spreadsheet)
+        cells = worksheet.cells.all()
+        serializer = CellSerializer(cells, many=True)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def export_excel(self, request, pk=None):
