@@ -197,11 +197,6 @@ const MinitabView = () => {
       <div className="border-b border-gray-300 bg-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold text-gray-900">{spreadsheet.name}</h1>
-          {hasUnsavedChanges && (
-            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-              Not saved
-            </span>
-          )}
         </div>
         <button
           onClick={handleSaveSpreadsheet}

@@ -76,8 +76,14 @@ export const spreadsheetsAPI = {
 
   // Worksheet operations
   getWorksheets: async (id: string): Promise<Worksheet[]> => {
-    const response = await api.get<Worksheet[]>(`/spreadsheets/${id}/worksheets/`)
-    return response.data
+    const response = await api.get<any>(`/spreadsheets/${id}/worksheets/`)
+    // Handle paginated response from DRF
+    if (response.data && Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && response.data.results) {
+      return response.data.results
+    }
+    return []
   },
 
   createWorksheet: async (id: string, name: string): Promise<Worksheet> => {
@@ -106,10 +112,16 @@ export const spreadsheetsAPI = {
   },
 
   getWorksheetCells: async (id: string, worksheetId: string): Promise<Cell[]> => {
-    const response = await api.get<Cell[]>(`/spreadsheets/${id}/worksheet_cells/`, {
+    const response = await api.get<any>(`/spreadsheets/${id}/worksheet_cells/`, {
       params: { worksheet_id: worksheetId },
     })
-    return response.data
+    // Handle paginated response from DRF
+    if (response.data && Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && response.data.results) {
+      return response.data.results
+    }
+    return []
   },
 
   updateWorksheetCells: async (id: string, worksheetId: string, cells: Cell[]): Promise<void> => {
@@ -121,8 +133,14 @@ export const spreadsheetsAPI = {
 
   // Cell operations
   getCells: async (id: string): Promise<Cell[]> => {
-    const response = await api.get<Cell[]>(`/spreadsheets/${id}/cells/`)
-    return response.data
+    const response = await api.get<any>(`/spreadsheets/${id}/cells/`)
+    // Handle paginated response from DRF
+    if (response.data && Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && response.data.results) {
+      return response.data.results
+    }
+    return []
   },
 
   updateCell: async (
