@@ -100,6 +100,48 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         )
         instance.delete()
     
+    @action(detail=True, methods=['post'])
+    def toggle_favorite(self, request, pk=None):
+        """
+        Toggle favorite status of a spreadsheet.
+        """
+        spreadsheet = self.get_object()
+        spreadsheet.is_favorite = not spreadsheet.is_favorite
+        spreadsheet.save()
+        
+        log_activity(
+            user=self.request.user,
+            action_type='update',
+            model_name='Spreadsheet',
+            description=f"{'Marked' if spreadsheet.is_favorite else 'Unmarked'} spreadsheet '{spreadsheet.name}' as favorite",
+            object_id=spreadsheet.id,
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+        
+        serializer = SpreadsheetSerializer(spreadsheet)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """
+        Get recently viewed/modified spreadsheets.
+        """
+        user = request.user
+        spreadsheets = Spreadsheet.objects.filter(user=user).order_by('-updated_at')[:10]
+        serializer = SpreadsheetListSerializer(spreadsheets, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def favorites(self, request):
+        """
+        Get favorite spreadsheets.
+        """
+        user = request.user
+        spreadsheets = Spreadsheet.objects.filter(user=user, is_favorite=True).order_by('-updated_at')
+        serializer = SpreadsheetListSerializer(spreadsheets, many=True)
+        return Response(serializer.data)
+    
     @action(detail=True, methods=['get'])
     def cells(self, request, pk=None):
         """
@@ -175,10 +217,12 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
     def update_cell(self, request, pk=None):
         """
         Update a single cell.
+        Supports both worksheet-based and spreadsheet-based cells.
         """
         spreadsheet = self.get_object()
         row_index = request.data.get('row_index')
         column_index = request.data.get('column_index')
+        worksheet_id = request.data.get('worksheet_id')
         
         if row_index is None or column_index is None:
             return Response(
@@ -186,17 +230,41 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        cell, created = Cell.objects.update_or_create(
-            spreadsheet=spreadsheet,
-            row_index=row_index,
-            column_index=column_index,
-            defaults={
-                'value': request.data.get('value'),
-                'formula': request.data.get('formula'),
-                'data_type': request.data.get('data_type', 'text'),
-                'style': request.data.get('style'),
-            }
-        )
+        # If worksheet_id is provided, use worksheet-based cell
+        if worksheet_id:
+            try:
+                worksheet = Worksheet.objects.get(id=worksheet_id, spreadsheet=spreadsheet)
+                cell, created = Cell.objects.update_or_create(
+                    spreadsheet=spreadsheet,
+                    worksheet=worksheet,
+                    row_index=row_index,
+                    column_index=column_index,
+                    defaults={
+                        'value': request.data.get('value'),
+                        'formula': request.data.get('formula'),
+                        'data_type': request.data.get('data_type', 'text'),
+                        'style': request.data.get('style'),
+                    }
+                )
+            except Worksheet.DoesNotExist:
+                return Response(
+                    {'error': 'Worksheet not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # Fallback to spreadsheet-based cell (legacy support)
+            cell, created = Cell.objects.update_or_create(
+                spreadsheet=spreadsheet,
+                worksheet=None,
+                row_index=row_index,
+                column_index=column_index,
+                defaults={
+                    'value': request.data.get('value'),
+                    'formula': request.data.get('formula'),
+                    'data_type': request.data.get('data_type', 'text'),
+                    'style': request.data.get('style'),
+                }
+            )
         
         # Log activity
         action = 'create' if created else 'update'
@@ -280,18 +348,65 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         
         file = request.FILES['file']
         
+        # Validate file size (max 50MB)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if file.size > max_size:
+            return Response(
+                {'error': f'File size exceeds {max_size / 1024 / 1024}MB limit'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate file extension
+        if not file.name.lower().endswith('.csv'):
+            return Response(
+                {'error': 'Invalid file format. Only CSV files are supported.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         try:
+            # Read file content
+            file_content = file.read()
+            
+            if len(file_content) == 0:
+                return Response(
+                    {'error': 'File is empty'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
             # Read CSV into DataFrame
-            df = DataEngineService.import_from_csv(file.read())
+            df = DataEngineService.import_from_csv(file_content)
+            
+            if df.empty:
+                return Response(
+                    {'error': 'CSV file contains no data'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
             # Convert DataFrame to cells
             cells_data = DataEngineService.dataframe_to_cells(df, str(spreadsheet.id))
             
-            # Bulk create/update cells
+            if not cells_data:
+                return Response(
+                    {'error': 'No data could be extracted from CSV file'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get or create default worksheet
+            worksheet, _ = Worksheet.objects.get_or_create(
+                spreadsheet=spreadsheet,
+                name='Sheet 1',
+                defaults={'position': 0, 'is_active': True}
+            )
+            
+            # Bulk create/update cells with worksheet association
             with transaction.atomic():
+                # Clear existing cells in worksheet (optional - comment out if you want to append)
+                # worksheet.cells.all().delete()
+                
                 for cell_data in cells_data:
                     Cell.objects.update_or_create(
                         spreadsheet=spreadsheet,
+                        worksheet=worksheet,
                         row_index=cell_data['row_index'],
                         column_index=cell_data['column_index'],
                         defaults={
@@ -301,10 +416,9 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                     )
             
             # Update spreadsheet dimensions
-            if not df.empty:
-                spreadsheet.row_count = len(df.index)
-                spreadsheet.column_count = len(df.columns)
-                spreadsheet.save()
+            spreadsheet.row_count = max(spreadsheet.row_count, len(df.index) + 1)  # +1 for header
+            spreadsheet.column_count = max(spreadsheet.column_count, len(df.columns))
+            spreadsheet.save()
             
             # Log activity
             log_activity(
@@ -318,7 +432,8 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 metadata={
                     'rows': len(df.index),
                     'columns': len(df.columns),
-                    'file_type': 'CSV'
+                    'file_type': 'CSV',
+                    'file_name': file.name
                 }
             )
             
@@ -326,10 +441,20 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 {'message': 'CSV imported successfully', 'rows': len(df.index), 'columns': len(df.columns)},
                 status=status.HTTP_200_OK
             )
-        except Exception as e:
+        except ValueError as e:
+            # Handle validation errors
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"[IMPORT CSV ERROR] {error_msg}")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Failed to import CSV: {error_msg}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
@@ -348,18 +473,71 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
         file = request.FILES['file']
         sheet_name = request.data.get('sheet_name')
         
+        # Validate file size (max 50MB)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if file.size > max_size:
+            return Response(
+                {'error': f'File size exceeds {max_size / 1024 / 1024}MB limit'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate file extension
+        file_ext = file.name.lower()
+        if not (file_ext.endswith('.xlsx') or file_ext.endswith('.xls')):
+            return Response(
+                {'error': 'Invalid file format. Only Excel files (.xlsx, .xls) are supported.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Convert empty string to None
+        if not sheet_name or sheet_name == 'None':
+            sheet_name = None
+        
         try:
+            # Read file content
+            file_content = file.read()
+            
+            if len(file_content) == 0:
+                return Response(
+                    {'error': 'File is empty'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
             # Read Excel into DataFrame
-            df = DataEngineService.import_from_excel(file.read(), sheet_name)
+            df = DataEngineService.import_from_excel(file_content, sheet_name)
+            
+            if df.empty:
+                return Response(
+                    {'error': 'Excel file contains no data'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
             # Convert DataFrame to cells
             cells_data = DataEngineService.dataframe_to_cells(df, str(spreadsheet.id))
             
-            # Bulk create/update cells
+            if not cells_data:
+                return Response(
+                    {'error': 'No data could be extracted from Excel file'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get or create worksheet with the sheet name
+            worksheet_name = sheet_name or 'Sheet 1'
+            worksheet, created = Worksheet.objects.get_or_create(
+                spreadsheet=spreadsheet,
+                name=worksheet_name,
+                defaults={'position': 0, 'is_active': True}
+            )
+            
+            # Bulk create/update cells with worksheet association
             with transaction.atomic():
+                # Clear existing cells in worksheet (optional - comment out if you want to append)
+                # worksheet.cells.all().delete()
+                
                 for cell_data in cells_data:
                     Cell.objects.update_or_create(
                         spreadsheet=spreadsheet,
+                        worksheet=worksheet,
                         row_index=cell_data['row_index'],
                         column_index=cell_data['column_index'],
                         defaults={
@@ -369,10 +547,9 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                     )
             
             # Update spreadsheet dimensions
-            if not df.empty:
-                spreadsheet.row_count = len(df.index)
-                spreadsheet.column_count = len(df.columns)
-                spreadsheet.save()
+            spreadsheet.row_count = max(spreadsheet.row_count, len(df.index) + 1)  # +1 for header
+            spreadsheet.column_count = max(spreadsheet.column_count, len(df.columns))
+            spreadsheet.save()
             
             # Log activity
             log_activity(
@@ -387,7 +564,8 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                     'rows': len(df.index),
                     'columns': len(df.columns),
                     'file_type': 'Excel',
-                    'sheet_name': sheet_name
+                    'sheet_name': sheet_name,
+                    'file_name': file.name
                 }
             )
             
@@ -395,10 +573,20 @@ class SpreadsheetViewSet(viewsets.ModelViewSet):
                 {'message': 'Excel imported successfully', 'rows': len(df.index), 'columns': len(df.columns)},
                 status=status.HTTP_200_OK
             )
-        except Exception as e:
+        except ValueError as e:
+            # Handle validation errors
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"[IMPORT EXCEL ERROR] {error_msg}")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Failed to import Excel: {error_msg}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     @action(detail=True, methods=['get'])

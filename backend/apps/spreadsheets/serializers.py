@@ -44,7 +44,7 @@ class SpreadsheetSerializer(serializers.ModelSerializer):
         model = Spreadsheet
         fields = (
             'id', 'name', 'description', 'row_count', 'column_count',
-            'is_public', 'user', 'cells', 'worksheets', 'worksheet_names', 'created_at', 'updated_at'
+            'is_public', 'is_favorite', 'user', 'cells', 'worksheets', 'worksheet_names', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'user', 'created_at', 'updated_at')
 
@@ -57,7 +57,7 @@ class SpreadsheetListSerializer(serializers.ModelSerializer):
         model = Spreadsheet
         fields = (
             'id', 'name', 'description', 'row_count', 'column_count',
-            'is_public', 'worksheet_names', 'created_at', 'updated_at'
+            'is_public', 'is_favorite', 'worksheet_names', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
 
@@ -92,6 +92,6 @@ class SpreadsheetCreateSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Spreadsheet
-        fields = ('id', 'name', 'description', 'row_count', 'column_count', 'is_public', 'worksheet_names')
+        fields = ('id', 'name', 'description', 'row_count', 'column_count', 'is_public', 'is_favorite', 'worksheet_names')
         read_only_fields = ('id',)
 

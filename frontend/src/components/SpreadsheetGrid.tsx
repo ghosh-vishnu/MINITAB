@@ -154,6 +154,27 @@ const SpreadsheetGrid = ({
           const isFormula = newValue.trim().startsWith('=')
           const dataType = isFormula ? 'formula' : 'text'
 
+          // Update cell via API - use updateWorksheetCells for worksheet cells
+          if (worksheetId) {
+            await spreadsheetsAPI.updateWorksheetCells(spreadsheetId, worksheetId, [{
+              row_index: rowIndex,
+              column_index: columnIndex,
+              value: newValue,
+              data_type: dataType,
+              formula: isFormula ? newValue : undefined,
+            }])
+          } else {
+            // Fallback to single cell update if no worksheet
+            await spreadsheetsAPI.updateCell(
+              spreadsheetId,
+              rowIndex,
+              columnIndex,
+              newValue,
+              isFormula ? newValue : undefined,
+              dataType
+            )
+          }
+
           // Update local state immediately for UI responsiveness
           const updatedCells = [...cells]
           const cellIndex = updatedCells.findIndex(
@@ -185,7 +206,7 @@ const SpreadsheetGrid = ({
         }
       }, 500) // 500ms debounce
     },
-    [spreadsheetId, cells, onCellsUpdate]
+    [spreadsheetId, cells, worksheetId, onCellsUpdate]
   )
 
   // Handle formula bar input
@@ -339,7 +360,7 @@ const SpreadsheetGrid = ({
           animateRows={true}
           rowSelection="single"
           suppressCellFocus={false}
-          enableRangeSelection={true}
+          enableRangeSelection={false}
           enableFillHandle={true}
           enableRangeHandle={true}
           suppressRowClickSelection={false}

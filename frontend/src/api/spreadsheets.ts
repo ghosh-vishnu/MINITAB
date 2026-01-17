@@ -27,6 +27,7 @@ export interface Spreadsheet {
   row_count: number
   column_count: number
   is_public: boolean
+  is_favorite: boolean
   user: string
   cells?: Cell[]
   worksheets?: Worksheet[]
@@ -72,6 +73,31 @@ export const spreadsheetsAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/spreadsheets/${id}/`)
+  },
+
+  toggleFavorite: async (id: string): Promise<Spreadsheet> => {
+    const response = await api.post<Spreadsheet>(`/spreadsheets/${id}/toggle_favorite/`, {})
+    return response.data
+  },
+
+  getRecent: async (): Promise<Spreadsheet[]> => {
+    const response = await api.get<any>('/spreadsheets/recent/')
+    if (response.data && Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && response.data.results) {
+      return response.data.results
+    }
+    return []
+  },
+
+  getFavorites: async (): Promise<Spreadsheet[]> => {
+    const response = await api.get<any>('/spreadsheets/favorites/')
+    if (response.data && Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && response.data.results) {
+      return response.data.results
+    }
+    return []
   },
 
   // Worksheet operations
@@ -189,7 +215,7 @@ export const spreadsheetsAPI = {
     const response = await api.post(`/spreadsheets/${id}/import_csv/`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
-      },
+      }
     })
     return response.data
   },
@@ -203,7 +229,7 @@ export const spreadsheetsAPI = {
     const response = await api.post(`/spreadsheets/${id}/import_excel/`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
-      },
+      }
     })
     return response.data
   },

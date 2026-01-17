@@ -54,7 +54,7 @@ const MinitabGrid = ({
   
   // Store worksheets with their own data
   const [worksheets, setWorksheets] = useState<WorksheetData[]>([
-    { id: 1, name: spreadsheetName, cells: [...cells] }
+    { id: 1, name: spreadsheetName, cells: cells.length > 0 ? [...cells] : [] }
   ])
   const [activeTab, setActiveTab] = useState(1)
   
@@ -77,22 +77,32 @@ const MinitabGrid = ({
   const [editingTabId, setEditingTabId] = useState<number | null>(null)
   const [editingTabName, setEditingTabName] = useState<string>('')
 
-  // Get current worksheet data
+  // Get current worksheet data - MUST be defined before any useEffect that uses it
   const currentWorksheet = useMemo(() => {
     return worksheets.find(ws => ws.id === activeTab) || worksheets[0]
   }, [worksheets, activeTab])
-
-  // Initialize first worksheet with cells from props
+  
+  // Debug logging - moved after currentWorksheet definition
   useEffect(() => {
-    if (cells.length > 0 && worksheets[0] && worksheets[0].cells.length === 0) {
+    console.log(`[MinitabGrid] Cells prop updated: ${cells.length} cells`)
+    console.log(`[MinitabGrid] Current worksheet cells: ${currentWorksheet?.cells?.length || 0} cells`)
+  }, [cells, currentWorksheet])
+
+  // Update first worksheet with cells from props whenever cells change
+  useEffect(() => {
+    if (worksheets.length > 0) {
       setWorksheets(prev => prev.map((ws, idx) => {
         if (idx === 0) {
+          // Always update cells for the first worksheet when prop changes
           return { ...ws, cells: [...cells] }
         }
         return ws
       }))
+    } else {
+      // Initialize worksheets if empty
+      setWorksheets([{ id: 1, name: spreadsheetName, cells: [...cells] }])
     }
-  }, [cells]) // Only when cells prop changes from parent
+  }, [cells]) // Update when cells prop changes - removed worksheets.length dependency to avoid infinite loop
 
   // Load worksheet names from backend
   useEffect(() => {
@@ -107,10 +117,26 @@ const MinitabGrid = ({
     }
   }, [worksheetNames])
 
+  // Calculate actual column count from cells
+  const actualColumnCount = useMemo(() => {
+    const worksheetCells = currentWorksheet?.cells && currentWorksheet.cells.length > 0 
+      ? currentWorksheet.cells 
+      : cells
+    
+    let maxCol = columnCount - 1 // Start with provided columnCount
+    worksheetCells.forEach((cell) => {
+      if (cell.column_index !== undefined) {
+        maxCol = Math.max(maxCol, cell.column_index)
+      }
+    })
+    return maxCol + 1 // Return count (0-based to 1-based)
+  }, [currentWorksheet, cells, columnCount])
+
   // Create column definitions with C1, C2, C3 format
   const columnDefs = useMemo<ColDef[]>(() => {
     const cols: ColDef[] = []
-    for (let i = 0; i < columnCount; i++) {
+    const colsToCreate = Math.max(columnCount, actualColumnCount)
+    for (let i = 0; i < colsToCreate; i++) {
       cols.push({
         headerName: `C${i + 1}`,
         field: `col_${i}`,
@@ -124,31 +150,62 @@ const MinitabGrid = ({
       })
     }
     return cols
-  }, [columnCount])
+  }, [columnCount, actualColumnCount])
 
   // Convert cells to row data for current worksheet
   const rowData = useMemo(() => {
     const rows: Record<string, any>[] = []
     const cellMap = new Map<string, string>()
 
-    // Use current worksheet's cells
-    const worksheetCells = currentWorksheet?.cells || []
+    // Use current worksheet's cells, fallback to cells prop if worksheet cells empty
+    const worksheetCells = currentWorksheet?.cells && currentWorksheet.cells.length > 0 
+      ? currentWorksheet.cells 
+      : cells
+    
+    console.log(`[MinitabGrid] Converting cells to rowData: ${worksheetCells.length} cells, rowCount: ${rowCount}, columnCount: ${columnCount}`)
+    
     worksheetCells.forEach((cell) => {
-      const key = `${cell.row_index}_${cell.column_index}`
-      cellMap.set(key, cell.value?.toString() || '')
+      // Validate cell has required properties
+      if (cell.row_index !== undefined && cell.column_index !== undefined) {
+        const key = `${cell.row_index}_${cell.column_index}`
+        const value = cell.value?.toString() || ''
+        if (value) {
+          cellMap.set(key, value)
+        }
+      } else {
+        console.warn('[MinitabGrid] Invalid cell found (missing row_index or column_index):', cell)
+      }
     })
 
-    for (let row = 0; row < rowCount; row++) {
+    // Find max row and column from actual data
+    let maxRow = 0
+    let maxCol = 0
+    cellMap.forEach((value, key) => {
+      const [row, col] = key.split('_').map(Number)
+      maxRow = Math.max(maxRow, row)
+      maxCol = Math.max(maxCol, col)
+    })
+
+    // Use actual data dimensions or provided dimensions, whichever is larger
+    const actualRowCount = Math.max(rowCount, maxRow + 1)
+    const actualColCount = Math.max(columnCount, maxCol + 1)
+
+    for (let row = 0; row < actualRowCount; row++) {
       const rowData: Record<string, any> = {}
-      for (let col = 0; col < columnCount; col++) {
+      for (let col = 0; col < actualColCount; col++) {
         const key = `${row}_${col}`
-        rowData[`col_${col}`] = cellMap.get(key) || ''
+        const cellValue = cellMap.get(key) || ''
+        rowData[`col_${col}`] = cellValue
       }
       rows.push(rowData)
     }
 
+    console.log(`[MinitabGrid] Created ${rows.length} rows with ${actualColCount} columns, cellMap size: ${cellMap.size}`)
+    if (rows.length > 0 && rows[0]) {
+      console.log(`[MinitabGrid] Sample first row data:`, Object.keys(rows[0]).slice(0, 5).map(key => `${key}: ${rows[0][key]}`))
+    }
     return rows
-  }, [currentWorksheet, rowCount, columnCount])
+  }, [currentWorksheet, cells, rowCount, columnCount])
 
   // Handle cell click
   const onCellClicked = useCallback((params: CellClickedEvent) => {
@@ -692,12 +749,12 @@ const MinitabGrid = ({
             animateRows={false}
             rowSelection="single"
             suppressCellFocus={false}
-            enableRangeSelection={true}
+            enableRangeSelection={false}
             enterNavigatesVertically={true}
             enterNavigatesVerticallyAfterEdit={true}
             rowHeight={22}
             headerHeight={25}
-            key={activeTab} // Force re-render on tab change
+            key={`${activeTab}-${cells.length}-${rowData.length}`} // Force re-render on tab/cells/data change
           />
         </div>
       </div>

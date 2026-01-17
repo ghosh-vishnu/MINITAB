@@ -7,6 +7,8 @@ import { useAuthStore } from '../store/authStore'
 const Dashboard = () => {
   const { user } = useAuthStore()
   const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([])
+  const [recentSheets, setRecentSheets] = useState<Spreadsheet[]>([])
+  const [favoriteSheets, setFavoriteSheets] = useState<Spreadsheet[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newSpreadsheetName, setNewSpreadsheetName] = useState('')
@@ -14,19 +16,27 @@ const Dashboard = () => {
   const navigate = useNavigate()
 
   useEffect(() => {
-    loadSpreadsheets()
+    loadAllData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const loadSpreadsheets = async () => {
+  const loadAllData = async () => {
     try {
       setLoading(true)
-      const data = await spreadsheetsAPI.list()
-      setSpreadsheets(Array.isArray(data) ? data : [])
+      const [allData, recentData, favoriteData] = await Promise.all([
+        spreadsheetsAPI.list(),
+        spreadsheetsAPI.getRecent(),
+        spreadsheetsAPI.getFavorites(),
+      ])
+      setSpreadsheets(Array.isArray(allData) ? allData : [])
+      setRecentSheets(Array.isArray(recentData) ? recentData : [])
+      setFavoriteSheets(Array.isArray(favoriteData) ? favoriteData : [])
     } catch (error: any) {
-      toast.error('Failed to load spreadsheets')
-      console.error('Error loading spreadsheets:', error)
+      toast.error('Failed to load data')
+      console.error('Error loading data:', error)
       setSpreadsheets([])
+      setRecentSheets([])
+      setFavoriteSheets([])
     } finally {
       setLoading(false)
     }
@@ -63,11 +73,157 @@ const Dashboard = () => {
       await spreadsheetsAPI.delete(id)
       // Remove from local state immediately
       setSpreadsheets(prev => prev.filter(sheet => sheet.id !== id))
+      setRecentSheets(prev => prev.filter(sheet => sheet.id !== id))
+      setFavoriteSheets(prev => prev.filter(sheet => sheet.id !== id))
       toast.success('Spreadsheet deleted successfully')
     } catch (error: any) {
       toast.error('Failed to delete spreadsheet')
     }
   }
+
+  const handleToggleFavorite = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const updated = await spreadsheetsAPI.toggleFavorite(id)
+      // Update all lists
+      setSpreadsheets(prev => 
+        prev.map(s => s.id === id ? { ...s, is_favorite: updated.is_favorite } : s)
+      )
+      setRecentSheets(prev =>
+        prev.map(s => s.id === id ? { ...s, is_favorite: updated.is_favorite } : s)
+      )
+      setFavoriteSheets(prev => 
+        updated.is_favorite
+          ? [updated, ...prev]
+          : prev.filter(s => s.id !== id)
+      )
+      toast.success(updated.is_favorite ? 'Added to favorites' : 'Removed from favorites')
+    } catch (error: any) {
+      toast.error('Failed to update favorite status')
+    }
+  }
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return
+
+    // Validate file type
+    const fileName = file.name.toLowerCase()
+    const isValidFormat = fileName.endsWith('.csv') || 
+                         fileName.endsWith('.xlsx') || 
+                         fileName.endsWith('.xls')
+    
+    if (!isValidFormat) {
+      toast.error('Unsupported file format. Please use CSV or Excel files (.csv, .xlsx, .xls)')
+      return
+    }
+
+    // Validate file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024 // 50MB
+    if (file.size > maxSize) {
+      toast.error('File size exceeds 50MB limit')
+      return
+    }
+
+    try {
+      toast.loading('Creating spreadsheet and importing file...', { id: 'upload' })
+      
+      // Create new spreadsheet with file name
+      const spreadsheetName = file.name.replace(/\.[^/.]+$/, '')
+      const spreadsheet = await spreadsheetsAPI.create({
+        name: spreadsheetName,
+        row_count: 100,
+        column_count: 26,
+      })
+
+      // Import the file
+      if (fileName.endsWith('.csv')) {
+        await spreadsheetsAPI.importCSV(spreadsheet.id, file)
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        await spreadsheetsAPI.importExcel(spreadsheet.id, file)
+      }
+
+      toast.success('File imported successfully', { id: 'upload' })
+      navigate(`/minitab/spreadsheet/${spreadsheet.id}`)
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          'Failed to import file'
+      toast.error(errorMessage, { id: 'upload' })
+      console.error('File upload error:', error)
+    }
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleFileUpload(file)
+    }
+    // Reset input to allow same file selection
+    e.target.value = ''
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      handleFileUpload(file)
+    }
+  }
+
+  const SheetCard = ({ sheet, onDelete, onToggleFavorite }: { sheet: Spreadsheet; onDelete: (id: string, e: React.MouseEvent) => void; onToggleFavorite: (id: string, e: React.MouseEvent) => void }) => (
+    <div
+      onClick={() => navigate(`/minitab/spreadsheet/${sheet.id}`)}
+      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer group"
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="w-10 h-10 bg-green-100 rounded flex items-center justify-center flex-shrink-0">
+          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          </svg>
+        </div>
+        <button
+          onClick={(e) => onToggleFavorite(sheet.id, e)}
+          className="p-2 rounded hover:bg-gray-100 transition-colors"
+        >
+          <svg
+            className={`w-5 h-5 transition-colors ${
+              sheet.is_favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+            }`}
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+        </button>
+      </div>
+      <h3 className="font-semibold text-gray-900 mb-1 truncate">{sheet.name}</h3>
+      <p className="text-sm text-gray-600 mb-3">
+        {new Date(sheet.updated_at).toLocaleDateString()}
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            navigate(`/minitab/spreadsheet/${sheet.id}`)
+          }}
+          className="flex-1 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+        >
+          Open
+        </button>
+        <button
+          onClick={(e) => onDelete(sheet.id, e)}
+          className="px-3 py-1 bg-red-100 text-red-600 text-sm rounded hover:bg-red-200 transition-colors"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )
 
   // Get user initials for avatar
   const getUserInitials = () => {
@@ -198,6 +354,7 @@ const Dashboard = () => {
                   </svg>
                   <span>Recent</span>
                 </button>
+
                 <button
                   onClick={() => setContentTab('favorites')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -206,57 +363,12 @@ const Dashboard = () => {
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
                   <span>Favorites</span>
                 </button>
-                <button
-                  onClick={() => setContentTab('connect')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                    contentTab === 'connect'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-5 h-5 rounded-full border-2 border-blue-600 flex items-center justify-center">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                  </div>
-                  <span>Excel Connect®</span>
-                </button>
-                <button
-                  onClick={() => setContentTab('onedrive')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                    contentTab === 'onedrive'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-5 h-5 bg-blue-500 rounded"></div>
-                  <span>Microsoft OneDrive®</span>
-                </button>
-                <button
-                  onClick={() => setContentTab('sharepoint')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                    contentTab === 'sharepoint'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-5 h-5 bg-green-600 rounded flex items-center justify-center text-white text-xs font-bold">S</div>
-                  <span>Microsoft SharePoint®</span>
-                </button>
-                <button
-                  onClick={() => setContentTab('googledrive')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                    contentTab === 'googledrive'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-5 h-5 bg-gradient-to-br from-blue-500 via-green-500 to-yellow-500 rounded"></div>
-                  <span>Google Drive™</span>
-                </button>
+
                 <button
                   onClick={() => setContentTab('local')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -266,153 +378,108 @@ const Dashboard = () => {
                   }`}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span>Open Local File</span>
                 </button>
               </div>
             </div>
 
-            {/* Main Content Area */}
-            <div className="flex-1 bg-white border border-gray-200 rounded-lg">
-              {/* Filters and Search */}
-              <div className="border-b border-gray-200 p-4">
-                <div className="flex items-center gap-4">
-                  <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option>Type</option>
-                    <option>All Types</option>
-                    <option>Spreadsheet</option>
-                    <option>Project</option>
-                  </select>
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      placeholder="Search"
-                      className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option>All Repositories</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Table Headers */}
-              <div className="border-b border-gray-200 px-4 py-3 bg-gray-50">
-                <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-700">
-                  <div className="col-span-4">Name</div>
-                  <div className="col-span-2">Opened ^</div>
-                  <div className="col-span-3">Repository</div>
-                  <div className="col-span-3">Account & Actions</div>
-                </div>
-              </div>
-
-              {/* Content List */}
-              <div className="p-8">
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <div className="w-16 h-16 text-gray-300 mb-4">
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+            {/* Content Area */}
+            <div className="flex-1">
+              {contentTab === 'recent' && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Recently Used</h3>
+                  {loading ? (
+                    <div className="text-center py-8 text-gray-500">Loading...</div>
+                  ) : recentSheets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">No recent spreadsheets</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {recentSheets.map(sheet => (
+                        <SheetCard
+                          key={sheet.id}
+                          sheet={sheet}
+                          onDelete={handleDeleteSpreadsheet}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      ))}
                     </div>
-                    <p className="text-gray-500">Loading...</p>
-                  </div>
-                ) : contentTab === 'recent' && spreadsheets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <div className="w-16 h-16 text-gray-300 mb-4">
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                  )}
+                </div>
+              )}
+
+              {contentTab === 'favorites' && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Favorite Files</h3>
+                  {loading ? (
+                    <div className="text-center py-8 text-gray-500">Loading...</div>
+                  ) : favoriteSheets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">No favorite spreadsheets</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {favoriteSheets.map(sheet => (
+                        <SheetCard
+                          key={sheet.id}
+                          sheet={sheet}
+                          onDelete={handleDeleteSpreadsheet}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      ))}
                     </div>
-                    <p className="text-gray-500 mb-2">No recent files</p>
-                    <button
-                      onClick={() => setShowCreateModal(true)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      Create a new spreadsheet
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {spreadsheets.map((spreadsheet) => (
-                      <Link
-                        key={spreadsheet.id}
-                        to={`/minitab/spreadsheet/${spreadsheet.id}`}
-                        className="block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors group"
+                  )}
+                </div>
+              )}
+
+              {contentTab === 'local' && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Open Local File</h3>
+                  <div 
+                    className="border-2 border-dashed border-blue-400 rounded-lg p-12 text-center hover:bg-blue-50 transition-colors cursor-pointer"
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                  >
+                    <label className="cursor-pointer block">
+                      <svg className="w-16 h-16 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <p className="text-gray-900 font-semibold mb-1 text-lg">Upload Excel or CSV File</p>
+                      <p className="text-sm text-gray-600 mb-2">Click to browse or drag and drop your file here</p>
+                      <p className="text-xs text-gray-500 mb-4">Supported formats: .xlsx, .xls, .csv (Max 50MB)</p>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          document.getElementById('file-upload-input')?.click()
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        <div className="grid grid-cols-12 gap-4 items-center">
-                          <div className="col-span-4 flex items-center gap-3">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            <span className="text-sm text-gray-900">{spreadsheet.name}</span>
-                          </div>
-                          <div className="col-span-2 text-sm text-gray-600">
-                            {new Date(spreadsheet.updated_at).toLocaleDateString()}
-                          </div>
-                          <div className="col-span-3 text-sm text-gray-600">Local</div>
-                          <div className="col-span-3 flex items-center justify-between gap-3">
-                            <span className="text-sm text-gray-600">{getUserInitials()}</span>
-                            <button
-                              onClick={(e) => handleDeleteSpreadsheet(spreadsheet.id, e)}
-                              className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded text-sm font-medium transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
+                        Select File
+                      </button>
+                      <input
+                        type="file"
+                        accept=".csv,.xlsx,.xls"
+                        onChange={handleFileInputChange}
+                        className="hidden"
+                        id="file-upload-input"
+                      />
+                    </label>
                   </div>
-                )}
-              </div>
+                  <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-semibold text-gray-900 mb-2">How to use:</h4>
+                    <ul className="text-sm text-gray-700 space-y-1">
+                      <li>• Click "Select File" or drag and drop your Excel/CSV file</li>
+                      <li>• The file will be automatically imported into a new spreadsheet</li>
+                      <li>• You can then edit, analyze, and save your data</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Create New Spreadsheet</h2>
-            <input
-              type="text"
-              value={newSpreadsheetName}
-              onChange={(e) => setNewSpreadsheetName(e.target.value)}
-              placeholder="Spreadsheet name"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleCreateSpreadsheet()
-                }
-              }}
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => {
-                  setShowCreateModal(false)
-                  setNewSpreadsheetName('')
-                }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateSpreadsheet}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

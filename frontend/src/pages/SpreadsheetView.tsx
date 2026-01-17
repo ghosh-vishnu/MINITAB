@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { spreadsheetsAPI, Spreadsheet, Cell, Worksheet } from '../api/spreadsheets'
 import { analysisAPI } from '../api/analysis'
@@ -185,16 +185,25 @@ const SpreadsheetView = () => {
     if (!id) return
 
     try {
+      toast.loading('Importing file...', { id: 'import' })
+      
       if (type === 'csv') {
         await spreadsheetsAPI.importCSV(id, file)
       } else {
         await spreadsheetsAPI.importExcel(id, file)
       }
-      toast.success('File imported successfully')
+      
+      toast.success('File imported successfully', { id: 'import' })
       setShowImportModal(false)
-      loadSpreadsheet()
+      
+      // Reload spreadsheet to show imported data
+      await loadSpreadsheet()
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to import file')
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          'Failed to import file'
+      toast.error(errorMessage, { id: 'import' })
+      console.error('Import error:', error)
     }
   }
 
@@ -367,60 +376,136 @@ interface ImportModalProps {
 
 const ImportModal = ({ onClose, onImport }: ImportModalProps) => {
   const [file, setFile] = useState<File | null>(null)
-  const [type, setType] = useState<'csv' | 'excel'>('csv')
+  const [isDragging, setIsDragging] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  const detectFileType = (fileName: string): 'csv' | 'excel' => {
+    const lowerName = fileName.toLowerCase()
+    if (lowerName.endsWith('.csv')) return 'csv'
+    return 'excel'
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0])
+      const selectedFile = e.target.files[0]
+      // Validate file size (max 50MB)
+      const maxSize = 50 * 1024 * 1024
+      if (selectedFile.size > maxSize) {
+        toast.error('File size exceeds 50MB limit')
+        return
+      }
+      setFile(selectedFile)
     }
   }
 
-  const handleSubmit = () => {
-    if (file) {
-      onImport(file, type)
+  const handleSubmit = async () => {
+    if (!file) {
+      toast.error('Please select a file')
+      return
+    }
+
+    setIsProcessing(true)
+    try {
+      const type = detectFileType(file.name)
+      await onImport(file, type)
+    } catch (error) {
+      // Error is handled by parent component
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const droppedFile = e.dataTransfer.files?.[0]
+    if (droppedFile) {
+      const maxSize = 50 * 1024 * 1024
+      if (droppedFile.size > maxSize) {
+        toast.error('File size exceeds 50MB limit')
+        return
+      }
+      setFile(droppedFile)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-xl font-bold mb-4">Import File</h2>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              File Type
-            </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as 'csv' | 'excel')}
-              className="input"
-            >
-              <option value="csv">CSV</option>
-              <option value="excel">Excel</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select File
-            </label>
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
+              isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
             <input
+              ref={fileInputRef}
               type="file"
               onChange={handleFileChange}
-              accept={type === 'csv' ? '.csv' : '.xlsx,.xls'}
-              className="input"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
             />
+            {file ? (
+              <div>
+                <svg className="w-12 h-12 text-green-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                <p className="text-xs text-gray-500 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setFile(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                  }}
+                  className="mt-2 text-sm text-red-600 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div>
+                <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="text-sm text-gray-600">
+                  {isDragging ? 'Drop file here' : 'Click to select or drag and drop'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">CSV, XLSX, XLS (Max 50MB)</p>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex justify-end space-x-2 mt-6">
-          <button onClick={onClose} className="btn btn-secondary">
+          <button onClick={onClose} className="btn btn-secondary" disabled={isProcessing}>
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!file}
+            disabled={!file || isProcessing}
             className="btn btn-primary"
           >
-            Import
+            {isProcessing ? 'Importing...' : 'Import'}
           </button>
         </div>
       </div>

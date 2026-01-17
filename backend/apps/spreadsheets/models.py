@@ -24,6 +24,7 @@ class Spreadsheet(models.Model):
     row_count = models.IntegerField(default=100)
     column_count = models.IntegerField(default=26)
     is_public = models.BooleanField(default=False)
+    is_favorite = models.BooleanField(default=False, db_index=True)  # Mark as favorite
     worksheet_names = models.JSONField(default=dict, blank=True)  # {1: 'Sheet1', 2: 'Sheet2', ...}
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -33,6 +34,7 @@ class Spreadsheet(models.Model):
         ordering = ['-updated_at']
         indexes = [
             models.Index(fields=['user', '-updated_at']),
+            models.Index(fields=['user', '-is_favorite', '-updated_at']),
         ]
 
     def __str__(self):
